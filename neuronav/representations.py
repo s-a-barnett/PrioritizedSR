@@ -1,3 +1,5 @@
+import numpy as np
+
 def compute_transmat(P, pi=None):
     if pi is None:
         # set pi to be uniform policy
@@ -6,6 +8,10 @@ def compute_transmat(P, pi=None):
 
 def compute_succrep(transmat, discount):
     return np.linalg.inv(np.eye(transmat.shape[0]) - discount * transmat)
+
+def signed_amp(x):
+    """Return sign(x) * amp(x), where amp is amplitude of complex number"""
+    return np.sign(np.real(x)) * np.sqrt(np.real(x) ** 2 + np.imag(x) ** 2)
 
 def eig(x, order="descend", sortby=signed_amp):
   """Computes eigenvectors and returns them in eigenvalue order.

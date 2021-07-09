@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.random as npr
+import heapq
 
 def onehot(value, max_value):
     vec = np.zeros(max_value)
@@ -28,7 +29,7 @@ def exp_normalize(x):
 
 # memory utils
 
-def memory_update(exp, agent, epsilon, beta):
+def memory_update(exp, agent, epsilon=0, beta=1e6):
     exp1 = exp.copy()
     if not exp[-1]:
         # change to "best" action in hindsight
@@ -42,19 +43,37 @@ def get_dyna_indices(experiences, weights, nsamples):
     return npr.choice(len(experiences), nsamples, p=p, replace=True)
 
 def get_predecessors(state, experiences):
-    return [exp for exp in experiences if (exp[2] == state)]
+    preds_nonunique = [tuple(exp) for exp in experiences if (exp[2] == state)]
+    preds_unique = list(set(preds_nonunique))
+    return [list(pred) for pred in preds_unique]
 
-def queue_append(exp, priority, queue):
-    
-    already_in_queue = False
-    # if exp is already in queue with a lower priority, replace with higher priority
-    for mem in queue:
-        if (mem["exp"] == exp):
-            already_in_queue = True
-            if (mem["priority"] < priority):
-                mem["priority"] = priority
-                                        
-    if not already_in_queue:
-        queue.append({"exp": exp, "priority": priority})
-                                                    
-    return queue
+class PriorityQueue:
+    def __init__(self):
+        self.heap = []
+        self.key_index = {}
+        self.count = 0
+
+    def push(self, item, priority):
+        entry = (priority, self.count, item)
+        heapq.heappush(self.heap, entry)
+        self.count += 1
+
+    def pop(self):
+        _, _, item = heapq.heappop(self.heap)
+        return item
+
+    def is_empty(self):
+        return len(self.heap) == 0
+
+    def update(self, item, priority):
+        for idx, (p, c, i) in enumerate(self.heap):
+            if i == item:
+                if p <= priority:
+                    break
+                del self.heap[idx]
+                self.heap.append((priority, c, i))
+                heapq.heapify(self.heap)
+                break
+            else:
+                self.push(item, priority)
+

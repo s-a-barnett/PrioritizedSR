@@ -42,7 +42,7 @@ class TDSR:
             goal = utils.onehot(goal, self.state_size)
         return self.M[:, state, :] @ goal
 
-    def sample_action(self, state, goal=None, epsilon=0.0, beta=1.0):
+    def sample_action(self, state, goal=None, epsilon=0.0, beta=1e6):
         if self.poltype == 'softmax':
             Qs = self.Q_estimates(state, goal)
             action = npr.choice(self.action_size, p=softmax(beta * Qs))
@@ -61,7 +61,7 @@ class TDSR:
         self.w[s_1] += self.learning_rate * error
         return error
 
-    def update_sr(self, current_exp, next_exp):
+    def update_sr(self, current_exp, next_exp, prospective=False):
         s = current_exp[0]
         s_a = current_exp[1]
         s_1 = current_exp[2]
@@ -73,8 +73,27 @@ class TDSR:
             td_error = (I + self.gamma * utils.onehot(s_1, self.state_size) - self.M[s_a, s, :])
         else:
             td_error = (I + self.gamma * self.M[s_a_1, s_1, :] - self.M[s_a, s, :])
-        self.M[s_a, s, :] += self.learning_rate * td_error
+        if not prospective:
+            self.M[s_a, s, :] += self.learning_rate * td_error
         return td_error
+
+    def evb(self, state, exp, epsilon=0.0, beta=1e6):
+        s = exp[0]
+        s_a = exp[1]
+        s_1 = exp[2]
+        r = exp[3]
+        M_new = self.M.copy()
+        M_new[s_a, s, :] += self.learning_rate * utils.memory_update(exp, self, prospective=True)
+        w_new = self.w.copy()
+        w_new[s_1] += self.learning_rate * (r - w_new[s_1])
+
+        Q_new = M_new @ w_new
+        pi_new = self.get_policy(M=M_new, goal=w_new, epsilon=epsilon, beta=beta)
+        pi_old = self.get_policy(epsilon=epsilon, beta=beta)
+        gain = (Q_new.T @ (pi_new - pi_old))[s, s]
+        M_new_states = np.diagonal(np.tensordot(pi_new.T, M_new, axes=1), axis1=0, axis2=1).T
+        need = M_new_states[state, s]
+        return gain * need
 
     def update_eigs(self, current_exp):
         s = current_exp[0]
@@ -85,13 +104,14 @@ class TDSR:
         self.eigs[s_1] += self.learning_rate * grad
         return grad
 
-    def get_policy(self, goal=None, epsilon=0.0, beta=1.0):
+    def get_policy(self, M=None, goal=None, epsilon=0.0, beta=1e6):
         if goal is None:
             goal = self.w
-        else:
-            goal = utils.onehot(goal, self.state_size)
 
-        Q = self.M @ goal
+        if M is None:
+            M = self.M
+
+        Q = M @ goal
         if self.poltype == 'softmax':
             policy = softmax(beta * Q, axis=0)
         else:
@@ -100,8 +120,8 @@ class TDSR:
             policy = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones((self.action_size, self.state_size))
         return policy
 
-    def get_M_states(self, goal=None, epsilon=0.0, beta=1.0):
-        policy = self.get_policy(goal, epsilon=epsilon, beta=beta)
+    def get_M_states(self, goal=None, epsilon=0.0, beta=1e6):
+        policy = self.get_policy(goal=goal, epsilon=epsilon, beta=beta)
         M = np.diagonal(np.tensordot(policy.T, self.M, axes=1), axis1=0, axis2=1).T
         return M
 

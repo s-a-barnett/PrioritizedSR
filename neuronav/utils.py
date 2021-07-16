@@ -29,12 +29,12 @@ def exp_normalize(x):
 
 # memory utils
 
-def memory_update(exp, agent, epsilon=0, beta=1e6):
+def memory_update(exp, agent, epsilon=0, beta=1e6, prospective=False):
     exp1 = exp.copy()
     if not exp[-1]:
         # change to "best" action in hindsight
         exp1[1] = agent.sample_action(exp[0], epsilon=epsilon, beta=beta)
-    td_sr = agent.update_sr(exp, exp1)
+    td_sr = agent.update_sr(exp, exp1, prospective=prospective)
     return td_sr
 
 def get_dyna_indices(experiences, weights, nsamples):

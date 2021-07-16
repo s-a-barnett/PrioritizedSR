@@ -51,7 +51,7 @@ class SimpleGrid:
                 return try_position
         
     def make_blocks(self, pattern):
-        if pattern == "four_rooms":
+        if (pattern == "four_rooms") or (pattern == "four_rooms_blocked"):
             mid = int(self.grid_size // 2)
             earl_mid = int(mid // 2)
             late_mid = mid+earl_mid + 1
@@ -59,6 +59,8 @@ class SimpleGrid:
             blocks_b = [[i,mid] for i in range(self.grid_size)]
             blocks = blocks_a + blocks_b
             self.bottlenecks = [[mid,earl_mid],[mid,late_mid],[earl_mid,mid],[late_mid,mid]]
+            if pattern == "four_rooms_blocked":
+                self.bottlenecks.remove([earl_mid, mid])
             for bottleneck in self.bottlenecks:
                 blocks.remove(bottleneck)
             return blocks

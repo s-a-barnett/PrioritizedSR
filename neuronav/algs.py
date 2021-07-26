@@ -85,14 +85,27 @@ class TDSR:
         M_new = self.M.copy()
         M_new[s_a, s, :] += self.learning_rate * utils.memory_update(exp, self, prospective=True)
         w_new = self.w.copy()
-        w_new[s_1] += self.learning_rate * (r - w_new[s_1])
-
-        Q_new = M_new @ w_new
-        pi_new = self.get_policy(M=M_new, goal=w_new, epsilon=epsilon, beta=beta)
+        reward_error = r - w_new[s_1]
+        w_new[s_1] += self.learning_rate * reward_error
         pi_old = self.get_policy(epsilon=epsilon, beta=beta)
-        gain = (Q_new.T @ (pi_new - pi_old))[s, s]
-        M_new_states = np.diagonal(np.tensordot(pi_new.T, M_new, axes=1), axis1=0, axis2=1).T
-        need = M_new_states[state, s]
+
+        if reward_error != 0:
+            Q_new = M_new @ w_new
+            pi_new = self.get_policy(M=M_new, goal=w_new, epsilon=epsilon, beta=beta)
+            gain = (Q_new.T @ (pi_new - pi_old))[s, s]
+        else:
+            q_new = M_new[:, s, :] @ self.w
+            if self.poltype == 'softmax':
+                pi_s_new = softmax(beta * q_new)
+            else:
+                mask = (q_new == q_new.max())
+                greedy = mask / mask.sum()
+                pi_s_new = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones(self.action_size)
+            gain = q_new @ (pi_s_new - pi_old[:, s])
+            pi_new = pi_old.copy()
+            pi_new[:, s] = pi_s_new
+
+        need = pi_new[:, state].T @ M_new[:, state, s]
         return gain * need
 
     def update_eigs(self, current_exp):

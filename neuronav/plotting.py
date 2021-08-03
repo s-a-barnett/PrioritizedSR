@@ -5,7 +5,7 @@ from representations import eig
 import utils
 import copy
 
-def plot_place_fields(agent, env, epsilon=1.0, beta=3.0):
+def plot_place_fields(agent, env, epsilon=0.0, beta=5.0):
     M = agent.get_M_states(epsilon=epsilon, beta=beta).copy()
     M = np.reshape(M, [env.state_size, env.grid_size, env.grid_size])
     
@@ -18,7 +18,7 @@ def plot_place_fields(agent, env, epsilon=1.0, beta=3.0):
             ax = plt.subplot(env.grid_size, env.grid_size, i+1)
             ax.imshow(utils.mask_grid(M[i, :, :], env.blocks), cmap=cmap)
     
-def plot_grid_fields(agent, env, online=False, epsilon=1.0, beta=3.0, nrows=None):
+def plot_grid_fields(agent, env, online=False, epsilon=0.0, beta=5.0, nrows=None):
     if nrows is None:
         nrows = int(np.sqrt(env.state_size))
     if online:

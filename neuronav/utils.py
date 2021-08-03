@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.random as npr
 import heapq
+from collections import defaultdict
 
 def onehot(value, max_value):
     vec = np.zeros(max_value)
@@ -27,25 +28,56 @@ def exp_normalize(x):
     y = np.exp(x - b)
     return y / y.sum()
 
+def run_episode(agent, env, epsilon=0.0, beta=1e6, episode_length=None, agent_pos=None, goal_pos=None, update=True, sarsa=True, pretrain=False):
+    if episode_length is None:
+        episode_length = 10 * env.grid_size
+    env.reset(agent_pos=agent_pos, goal_pos=goal_pos)
+    state = env.observation
+    experiences = []
+    m_errors = []
+    w_errors = []
+
+    for j in range(episode_length):
+        action = agent.sample_action(state, epsilon=epsilon, beta=beta)
+        reward = env.step(action)
+        state_next = env.observation
+        done = env.done
+        experiences.append((state, action, state_next, reward, done))
+        state = state_next
+
+        if update:
+            if not sarsa:
+                if pretrain:
+                    m_error = agent.update_sr(experiences[-1])
+                    w_error = agent.update_w(experiences[-1])
+                else:
+                    m_error, w_error = agent.update(experiences[-1])
+                m_errors.append(np.linalg.norm(m_error))
+                w_errors.append(np.linalg.norm(w_error))
+            else:
+                if (j > 0):
+                    if pretrain:
+                        m_error = agent.update_sr(experiences[-2], next_exp=experiences[-1])
+                        w_error = agent.update_w(experiences[-2])
+                    else:
+                        m_error, w_error = agent.update(experiences[-2], next_exp=experiences[-1])
+                    m_errors.append(np.linalg.norm(m_error))
+                    w_errors.append(np.linalg.norm(w_error))
+                if done:
+                    if pretrain:
+                        m_error = agent.update_sr(experiences[-1], next_exp=experiences[-1])
+                        w_error = agent.update_w(experiences[-1])
+                    else:
+                        m_error, w_error = agent.update(experiences[-1], next_exp=experiences[-1])
+                    m_errors.append(np.linalg.norm(m_error))
+                    w_errors.append(np.linalg.norm(w_error))
+
+        if done:
+            break
+
+    return experiences, m_errors, w_errors
+
 # memory utils
-
-def memory_update(exp, agent, epsilon=0, beta=1e6, prospective=False):
-    exp1 = exp.copy()
-    if not exp[-1]:
-        # change to "best" action in hindsight
-        exp1[1] = agent.sample_action(exp[0], epsilon=epsilon, beta=beta)
-    td_sr = agent.update_sr(exp, exp1, prospective=prospective)
-    return td_sr
-
-def get_dyna_indices(experiences, weights, nsamples):
-    p = exp_normalize(np.array(weights))
-    p /= p.sum()
-    return npr.choice(len(experiences), nsamples, p=p, replace=True)
-
-def get_predecessors(state, experiences):
-    preds_nonunique = [tuple(exp) for exp in experiences if (exp[2] == state)]
-    preds_unique = list(set(preds_nonunique))
-    return [list(pred) for pred in preds_unique]
 
 class PriorityQueue:
     def __init__(self):
@@ -77,3 +109,9 @@ class PriorityQueue:
             else:
                 self.push(item, priority)
 
+# logging utils
+
+class Logger:
+    def __init__(self, config):
+        self.config = config # dict of training hyperparameters
+        self.logs = defaultdict(set)

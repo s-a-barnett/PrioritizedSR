@@ -28,17 +28,16 @@ def exp_normalize(x):
     y = np.exp(x - b)
     return y / y.sum()
 
-def run_episode(agent, env, epsilon=0.0, beta=1e6, episode_length=None, agent_pos=None, goal_pos=None, update=True, sarsa=True, pretrain=False):
+def run_episode(agent, env, beta=1e6, episode_length=None, agent_pos=None, goal_pos=None, update=True, sarsa=True, pretrain=False):
     if episode_length is None:
         episode_length = 10 * env.grid_size
     env.reset(agent_pos=agent_pos, goal_pos=goal_pos)
     state = env.observation
     experiences = []
-    m_errors = []
-    w_errors = []
+    td_errors = []
 
     for j in range(episode_length):
-        action = agent.sample_action(state, epsilon=epsilon, beta=beta)
+        action = agent.sample_action(state, beta=beta)
         reward = env.step(action)
         state_next = env.observation
         done = env.done
@@ -46,36 +45,23 @@ def run_episode(agent, env, epsilon=0.0, beta=1e6, episode_length=None, agent_po
         state = state_next
 
         if update:
+            update_fn = super(type(agent), agent).update if pretrain else agent.update
+
             if not sarsa:
-                if pretrain:
-                    m_error = agent.update_sr(experiences[-1])
-                    w_error = agent.update_w(experiences[-1])
-                else:
-                    m_error, w_error = agent.update(experiences[-1])
-                m_errors.append(np.linalg.norm(m_error))
-                w_errors.append(np.linalg.norm(w_error))
+                td_error = update_fn(experiences[-1])
+                td_errors.append(td_error)
             else:
                 if (j > 0):
-                    if pretrain:
-                        m_error = agent.update_sr(experiences[-2], next_exp=experiences[-1])
-                        w_error = agent.update_w(experiences[-2])
-                    else:
-                        m_error, w_error = agent.update(experiences[-2], next_exp=experiences[-1])
-                    m_errors.append(np.linalg.norm(m_error))
-                    w_errors.append(np.linalg.norm(w_error))
+                    td_error = update_fn(experiences[-2], next_exp=experiences[-1])
+                    td_errors.append(td_error)
                 if done:
-                    if pretrain:
-                        m_error = agent.update_sr(experiences[-1], next_exp=experiences[-1])
-                        w_error = agent.update_w(experiences[-1])
-                    else:
-                        m_error, w_error = agent.update(experiences[-1], next_exp=experiences[-1])
-                    m_errors.append(np.linalg.norm(m_error))
-                    w_errors.append(np.linalg.norm(w_error))
+                    td_error = update_fn(experiences[-1], next_exp=experiences[-1])
+                    td_errors.append(td_error)
 
         if done:
             break
 
-    return experiences, m_errors, w_errors
+    return experiences, td_errors
 
 # memory utils
 

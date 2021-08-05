@@ -4,6 +4,143 @@ from scipy.special import softmax
 from collections import defaultdict
 import utils
 
+class TDQ:
+    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, Q_init=None):
+        self.state_size = state_size
+        self.action_size = action_size
+
+        if Q_init == None:
+            self.Q = np.zeros((action_size, state_size))
+        elif np.isscalar(Q_init):
+            self.Q = Q_init * npr.randn(action_size, state_size)
+        else:
+            self.Q = Q_init
+
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.prioritized_states = np.zeros(state_size, dtype=np.int)
+
+    def sample_action(self, state, beta=1e6):
+        Qs = self.Q[:, state]
+        action = npr.choice(self.action_size, p=softmax(beta * Qs))
+        return action
+
+    def update_q(self, current_exp, next_exp=None, prospective=False):
+        s = current_exp[0]
+        s_a = current_exp[1]
+        s_1 = current_exp[2]
+
+        # determines whether update is on-policy or off-policy
+        if next_exp is None:
+            s_a_1 = np.argmax(self.Q[:, s_1])
+        else:
+            s_a_1 = next_exp[1]
+
+        r = current_exp[3]
+
+        q_error = r + self.gamma * self.Q[s_a_1, s_1] - self.Q[s_a, s]
+
+        if not prospective:
+            # actually perform update to Q if not prospective
+            self.Q[s_a, s] += self.learning_rate * q_error
+        return q_error
+
+    def update(self, current_exp, **kwargs):
+        q_error = self.update_q(current_exp, **kwargs)
+        td_error = {'q': np.linalg.norm(q_error)}
+        return td_error
+
+    def get_policy(self, beta=1e6):
+        policy = softmax(beta * self.Q, axis=0)
+        return policy
+
+class DynaQ(TDQ):
+
+    def __init__(self, state_size, action_size, num_recall, **kwargs):
+        super().__init__(state_size, action_size, **kwargs)
+        self.num_recall = num_recall
+        self.experiences = []
+        self.exp_weights = []
+        
+    def _get_dyna_indices(self):
+        p = utils.exp_normalize(np.array(self.exp_weights))
+        p /= p.sum()
+        return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
+
+    def update(self, current_exp, **kwargs):
+
+        self.experiences.append(current_exp)
+
+        # perform online update first
+        q_error = self.update_q(current_exp, **kwargs)
+
+        self.exp_weights.append(len(self.experiences))
+        mem_indices = self._get_dyna_indices()
+        mem = [self.experiences[i] for i in mem_indices]
+        for exp in mem:
+            self.prioritized_states[exp[0]] += 1
+            # perform off-policy update using recalled memories
+            q_error = self.update_q(exp)
+
+        td_error = {'q': np.linalg.norm(q_error)}
+        return td_error
+
+class PSQ(TDQ):
+
+    def __init__(self, state_size, action_size, num_recall, theta=1e-6, **kwargs):
+        super().__init__(state_size, action_size, **kwargs)
+        self.num_recall = num_recall
+        self.theta = theta
+        self.pqueue = utils.PriorityQueue()
+        self.predecessors = defaultdict(set)
+        self.model = {}
+
+    def _update_predecessors(self, state, action, next_state):
+        self.predecessors[next_state].add((state, action))
+
+    def priority(self, q_error):
+        error = q_error
+        return np.linalg.norm(error)
+    
+    def update(self, current_exp, **kwargs):
+        state, action, next_state, reward, done = current_exp
+
+        # update (deterministic) model and state predecessors
+        self.model[(state, action)] = (next_state, reward, done)
+        self._update_predecessors(state, action, next_state)
+
+        # compute value of update
+        q_error = self.update_q(current_exp, prospective=True, **kwargs)
+
+        # compute priority for the update, add to queue
+        priority = self.priority(q_error)
+        if priority > self.theta:
+            self.pqueue.push((state, action), -priority)
+
+        for k in range(self.num_recall):
+            if self.pqueue.is_empty():
+                break
+
+            # get highest priority experience
+            state, action = self.pqueue.pop()
+            self.prioritized_states[state] += 1
+            exp = (state, action) + self.model[(state, action)]
+
+            # update Q based on this experience
+            q_error = self.update_q(exp)
+
+            for s, a in self.predecessors[state]:
+                # add predecessors to priority queue
+                exp_pred = (s, a) + self.model[(s, a)]
+                q_error = self.update_q(exp_pred, prospective=True)
+                priority = self.priority(q_error)
+                if priority > self.theta:
+                    self.pqueue.push((s, a), -priority)
+
+        td_error = {'q': np.linalg.norm(q_error)}
+        return td_error
+
+
 class TDSR:
 
     def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax'):
@@ -53,7 +190,7 @@ class TDSR:
 
         # determines whether update is on-policy or off-policy
         if next_exp is None:
-            s_a_1 = np.argmax(self.Q_estimates(s))
+            s_a_1 = np.argmax(self.Q_estimates(s_1))
         else:
             s_a_1 = next_exp[1]
 
@@ -74,7 +211,8 @@ class TDSR:
     def update(self, current_exp, **kwargs):
         m_error = self.update_sr(current_exp, **kwargs)
         w_error = self.update_w(current_exp)
-        return m_error, w_error
+        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+        return td_error
 
     def get_policy(self, M=None, goal=None, epsilon=0.0, beta=1e6):
         if goal is None:
@@ -101,16 +239,16 @@ class TDSR:
 
 class DynaSR(TDSR):
     
-    def __init__(self, state_size, action_size, n_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
-        self.n_recall = n_recall
+        self.num_recall = num_recall
         self.experiences = []
         self.exp_weights = []
         
-    def get_dyna_indices(self):
+    def _get_dyna_indices(self):
         p = utils.exp_normalize(np.array(self.exp_weights))
         p /= p.sum()
-        return npr.choice(len(self.experiences), self.n_recall, p=p, replace=True)
+        return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
 
     def update(self, current_exp, **kwargs):
 
@@ -121,21 +259,22 @@ class DynaSR(TDSR):
         w_error = self.update_w(current_exp)
 
         self.exp_weights.append(len(self.experiences))
-        mem_indices = self.get_dyna_indices()
+        mem_indices = self._get_dyna_indices()
         mem = [self.experiences[i] for i in mem_indices]
         for exp in mem:
             self.prioritized_states[exp[0]] += 1
             # perform off-policy update using recalled memories
             m_error = self.update_sr(exp)
 
-        return m_error, w_error
+        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+        return td_error
 
 
 class PSSR(TDSR):
 
-    def __init__(self, state_size, action_size, n_recall, theta=1e-6, goal_pri=True, online=True, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, theta=1e-6, goal_pri=True, online=True, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
-        self.n_recall = n_recall
+        self.num_recall = num_recall
         self.theta = theta
         self.goal_pri = goal_pri
         self.online = online
@@ -171,7 +310,7 @@ class PSSR(TDSR):
         if priority > self.theta:
             self.pqueue.push((state, action), -priority)
 
-        for k in range(self.n_recall):
+        for k in range(self.num_recall):
             if self.pqueue.is_empty():
                 break
 
@@ -192,14 +331,15 @@ class PSSR(TDSR):
                 if priority > self.theta:
                     self.pqueue.push((s, a), -priority)
 
-        return m_error, w_error
+        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+        return td_error
 
 
 class MDSR(TDSR):
 
-    def __init__(self, state_size, action_size, n_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
-        self.n_recall = n_recall
+        self.num_recall = num_recall
         self.experiences = []
 
     def evb(self, state, exp, epsilon=0.0, beta=1e6):
@@ -252,7 +392,7 @@ class MDSR(TDSR):
         # list of possible experiences to update on
         unique_exps = list(set(self.experiences))
 
-        for k in range(self.n_recall):
+        for k in range(self.num_recall):
             # compute expected value of backup for every possible experience
             evbs = [{"exp": exp, "evb": self.evb(current_exp[0], exp)} for exp in unique_exps]
 
@@ -264,4 +404,5 @@ class MDSR(TDSR):
             # update successor representation with this experience
             m_error = self.update_sr(best_exp)
 
-        return m_error, w_error
+        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+        return td_error

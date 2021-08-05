@@ -6,11 +6,16 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=4G
-#SBATCH --time=23:59:59
-#SBATCH --array=0-499
+#SBATCH --time=02:00:00
+#SBATCH --array=0-321
 #SBATCH --mail-type=all
 #SBATCH --mail-user=t-sbarnett@microsoft.com
 
 module load anaconda3
-srun python train_from_hyperparameters.py $SLURM_ARRAY_TASK_ID
+START=$(( $SLURM_ARRAY_TASK_ID * 7 ))
+END=$(( $START + 6 ))
+for i in $(seq $START $END)
+do
+    srun python train_from_hyperparameters.py $i
+done
 

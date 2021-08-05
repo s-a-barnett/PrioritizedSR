@@ -56,28 +56,39 @@ class TDQ:
 
 class DynaQ(TDQ):
 
-    def __init__(self, state_size, action_size, num_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, kappa=0.0,  **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.experiences = []
-        self.exp_weights = []
+        self.kappa = kappa
+        self.tau = np.zeros((state_size, action_size), dtype=np.int)
         
     def _get_dyna_indices(self):
-        p = utils.exp_normalize(np.array(self.exp_weights))
-        p /= p.sum()
+        p = utils.exp_normalize(np.arange(len(self.experiences)))
         return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
+
+    def _add_intrinsic_reward(self, exp):
+        state, action, state_next, reward, done = exp
+        reward += self.kappa * np.sqrt(self.tau[state, action])
+        return state, action, state_next, reward, done
 
     def update(self, current_exp, **kwargs):
 
+        # update time elapsed since state-action pair last seen
+        self.tau += 1
+        self.tau[current_exp[0], current_exp[1]] = 0
+
+        # remember sliding window of past 10 experiences
         self.experiences.append(current_exp)
+        self.experiences = self.experiences[-10:]
 
         # perform online update first
         q_error = self.update_q(current_exp, **kwargs)
 
-        self.exp_weights.append(len(self.experiences))
         mem_indices = self._get_dyna_indices()
         mem = [self.experiences[i] for i in mem_indices]
         for exp in mem:
+            exp = self._add_intrinsic_reward(exp)
             self.prioritized_states[exp[0]] += 1
             # perform off-policy update using recalled memories
             q_error = self.update_q(exp)
@@ -239,29 +250,40 @@ class TDSR:
 
 class DynaSR(TDSR):
     
-    def __init__(self, state_size, action_size, num_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, kappa=0.0, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.experiences = []
-        self.exp_weights = []
+        self.kappa = kappa
+        self.tau = np.zeros((state_size, action_size), dtype=np.int)
         
     def _get_dyna_indices(self):
-        p = utils.exp_normalize(np.array(self.exp_weights))
-        p /= p.sum()
+        p = utils.exp_normalize(np.arange(len(self.experiences)))
         return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
+
+    def _add_intrinsic_reward(self, exp):
+        state, action, state_next, reward, done = exp
+        reward += self.kappa * np.sqrt(self.tau[state, action])
+        return state, action, state_next, reward, done
 
     def update(self, current_exp, **kwargs):
 
+        # update time elapsed since state-action pair last seen
+        self.tau += 1
+        self.tau[current_exp[0], current_exp[1]] = 0
+
+        # remember sliding window of past 10 experiences
         self.experiences.append(current_exp)
+        self.experiences = self.experiences[-10:]
 
         # perform online update first
         m_error = self.update_sr(current_exp, **kwargs)
         w_error = self.update_w(current_exp)
 
-        self.exp_weights.append(len(self.experiences))
         mem_indices = self._get_dyna_indices()
         mem = [self.experiences[i] for i in mem_indices]
         for exp in mem:
+            exp = self._add_intrinsic_reward(exp)
             self.prioritized_states[exp[0]] += 1
             # perform off-policy update using recalled memories
             m_error = self.update_sr(exp)

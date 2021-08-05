@@ -12,13 +12,15 @@ import time
 import pickle
 import uuid
 
-MAX_TRAINING_EPISODES = 1000
+MAX_TRAINING_EPISODES = 10000
 
 def agent_factory(args, state_size, action_size):
     if args.agent == 'tdsr':
         agent = algs.TDSR(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynasr':
         agent = algs.DynaSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
+    elif args.agent == 'dynasrplus':
+        agent = algs.DynaSR(state_size, action_size, args.num_recall, kappa=1e-3, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'pssr':
         agent = algs.PSSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True)
     elif args.agent == 'mpssr':
@@ -29,6 +31,8 @@ def agent_factory(args, state_size, action_size):
         agent = algs.TDQ(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynaq':
         agent = algs.DynaQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
+    elif args.agent == 'dynaqplus':
+        agent = algs.DynaQ(state_size, action_size, args.num_recall, kappa=1e-3, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'psq':
         agent = algs.PSQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
     else:
@@ -54,15 +58,15 @@ def main(args):
 
     tic = time.time()
 
-    for i in progressbar.progressbar(range(MAX_TRAINING_EPISODES)):
+    for i in progressbar.progressbar(range(MAX_TRAINING_EPISODES + args.num_pretrain)):
         # train for an episode
         pretrain = True if i < args.num_pretrain else False
         experiences, td_errors = utils.run_episode(agent, env, beta=args.beta, agent_pos=agent_pos, goal_pos=goal_pos, sarsa=args.sarsa, pretrain=pretrain)
 
         logger.logs['ep_train_td_errors'].append(td_errors)
         
-        # every 1 episode, test to see whether optimal policy is achieved
-        if i % 1 == 0:
+        # every episode, test to see whether optimal policy is achieved
+        if i >= args.num_pretrain:
             experiences, _ = utils.run_episode(agent, env, beta=1e6, agent_pos=agent_pos, goal_pos=goal_pos, update=False)
             iterations.append(i)
             logger.logs['ep_test_cum_reward'].append(args.gamma ** len(experiences))
@@ -71,14 +75,23 @@ def main(args):
 
     toc = time.time()
 
-    logger.logs['num_eps_to_optimality'] = i
+    logger.logs['num_eps_to_optimality'] = i - args.num_pretrain
     logger.logs['wall_clock_time'] = toc - tic
 
-    print('\n\n Number of episodes to optimality: %d' % i)
-    print('\n Wall clock time to convergence: %.2fs' % (toc - tic))
+    print('\n\n Number of episodes to optimality: %d' % logger.logs['num_eps_to_optimality'])
+    print('\n Wall clock time to convergence: %.2fs' % logger.logs['wall_clock_time'])
 
     if not args.no_logs:
-        logger.logs['agent'] = agent
+        ## uncomment the line below for more comprehensive (but more memory-intensive) logging
+        # logger.logs['agent'] = agent
+
+        logger.logs['agent_prioritized_states'] = agent.prioritized_states
+        if 'sr' in args.agent:
+            logger.logs['agent_M'] = agent.get_M_states(beta=args.beta)
+            logger.logs['agent_w'] = agent.w
+            logger.logs['agent_Q'] = agent.M @ agent.w
+        else:
+            logger.logs['agent_Q'] = agent.Q
 
         if args.log_name is None:
             log_name = args.agent + '_' + str(uuid.uuid4())

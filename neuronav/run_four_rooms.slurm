@@ -16,6 +16,6 @@ START=$(( $SLURM_ARRAY_TASK_ID * 7 ))
 END=$(( $START + 6 ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py $i
+    srun python train_from_hyperparameters.py four_rooms.py $i
 done
 

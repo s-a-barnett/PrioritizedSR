@@ -25,8 +25,6 @@ def agent_factory(args, state_size, action_size):
         agent = algs.PSSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True)
     elif args.agent == 'mpssr':
         agent = algs.PSSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=False)
-    elif args.agent == 'mdsr':
-        agent = algs.MDSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'tdq':
         agent = algs.TDQ(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynaq':
@@ -41,9 +39,9 @@ def agent_factory(args, state_size, action_size):
     return agent
 
 def main(args):
-    logger = utils.Logger(vars(args))
+    logger = utils.Logger('four_rooms', vars(args))
     npr.seed(args.seed)
-    env = SimpleGrid(args.grid_size, block_pattern=args.env, obs_mode='index')
+    env = SimpleGrid(args.grid_size, block_pattern='four_rooms', obs_mode='index')
     agent = agent_factory(args, env.state_size, env.action_size)
     optimal_episode_length = 2 * (args.grid_size - 1)
 
@@ -98,7 +96,7 @@ def main(args):
         else:
             log_name = args.log_name
 
-        picklefile = open('logs/' + log_name + '.pkl', 'wb')
+        picklefile = open('logs/four_rooms/' + log_name + '.pkl', 'wb')
         pickle.dump(logger, picklefile)
         picklefile.close()
     
@@ -111,7 +109,6 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--beta', type=float, default=5.0, help='softmax inverse temperature')
     parser.add_argument('-r', '--num_recall', type=int, default=10, help='number of recall steps')
     parser.add_argument('-g', '--grid_size', type=int, default=7, help='size of grid')
-    parser.add_argument('-e', '--env', type=str, default='four_rooms', help='environment')
     parser.add_argument('--num_pretrain', type=int, default=0, help='pretraining episodes before recall')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate for agent')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for agent')

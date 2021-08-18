@@ -7,15 +7,15 @@ import copy
 
 def plot_place_fields(agent, env, epsilon=0.0, beta=5.0):
     M = agent.get_M_states(epsilon=epsilon, beta=beta).copy()
-    M = np.reshape(M, [env.state_size, env.grid_size, env.grid_size])
+    M = np.reshape(M, [env.state_size, env.grid_size[0], env.grid_size[1]])
     
     cmap = copy.copy(mpl.cm.get_cmap("viridis"))
     cmap.set_bad(color='white')
     
-    plt.figure(1, figsize=(env.grid_size*3, env.grid_size*3))
+    plt.figure(1, figsize=(env.grid_size[0]*3, env.grid_size[1]*3))
     for i in range(env.state_size):
         if env.state_to_point(i) not in env.blocks:
-            ax = plt.subplot(env.grid_size, env.grid_size, i+1)
+            ax = plt.subplot(env.grid_size[0], env.grid_size[1], i+1)
             ax.imshow(utils.mask_grid(M[i, :, :], env.blocks), cmap=cmap)
     
 def plot_grid_fields(agent, env, online=False, epsilon=0.0, beta=5.0, nrows=None):

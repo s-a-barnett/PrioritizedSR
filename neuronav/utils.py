@@ -28,7 +28,7 @@ def exp_normalize(x):
     y = np.exp(x - b)
     return y / y.sum()
 
-def run_episode(agent, env, beta=1e6, episode_length=None, agent_pos=None, goal_pos=None, reward_val=None, update=True, sarsa=False, pretrain=False):
+def run_episode(agent, env, epsilon=0.0, beta=1e6, poltype='softmax', episode_length=None, agent_pos=None, goal_pos=None, reward_val=None, update=True, sarsa=False, pretrain=False):
     if episode_length is None:
         episode_length = 10 * int(np.sqrt(env.state_size))
     env.reset(agent_pos=agent_pos, goal_pos=goal_pos, reward_val=reward_val)
@@ -37,7 +37,7 @@ def run_episode(agent, env, beta=1e6, episode_length=None, agent_pos=None, goal_
     td_errors = []
 
     for j in range(episode_length):
-        action = agent.sample_action(state, beta=beta)
+        action = agent.sample_action(state, epsilon=epsilon, beta=beta)
         reward = env.step(action)
         state_next = env.observation
         done = env.done

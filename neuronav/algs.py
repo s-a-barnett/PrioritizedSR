@@ -5,7 +5,7 @@ from collections import defaultdict
 import utils
 
 class TDQ:
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, Q_init=None):
+    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, poltype='softmax', Q_init=None):
         self.state_size = state_size
         self.action_size = action_size
 
@@ -19,11 +19,20 @@ class TDQ:
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.prioritized_states = np.zeros(state_size, dtype=np.int)
-
-    def sample_action(self, state, beta=1e6):
+        self.num_updates = 0
+        self.poltype = poltype
+        
+    def sample_action(self, state, epsilon=0.0, beta=1e6):
         Qs = self.Q[:, state]
-        action = npr.choice(self.action_size, p=softmax(beta * Qs))
+        if self.poltype == 'softmax':
+            action = npr.choice(self.action_size, p=softmax(beta * Qs))
+        else:
+            if npr.rand() < epsilon:
+                action = npr.choice(self.action_size)
+            else:
+                action = npr.choice(np.flatnonzero(np.isclose(Qs, Qs.max())))
         return action
+
 
     def update_q(self, current_exp, next_exp=None, prospective=False):
         s = current_exp[0]
@@ -47,11 +56,17 @@ class TDQ:
 
     def update(self, current_exp, **kwargs):
         q_error = self.update_q(current_exp, **kwargs)
+        self.num_updates += 1
         td_error = {'q': np.linalg.norm(q_error)}
         return td_error
 
-    def get_policy(self, beta=1e6):
-        policy = softmax(beta * self.Q, axis=0)
+    def get_policy(self, epsilon=0.0, beta=1e6):
+        if self.poltype == 'softmax':
+            policy = softmax(beta * agent.Q, axis=0)
+        else:
+            mask = (agent.Q == agent.Q.max(0))
+            greedy = mask / mask.sum(0)
+            policy = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones((self.action_size, self.state_size))
         return policy
 
 class DynaQ(TDQ):
@@ -59,48 +74,66 @@ class DynaQ(TDQ):
     def __init__(self, state_size, action_size, num_recall, kappa=0.0,  **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
-        self.experiences = []
-        self.kappa = kappa
-        self.tau = np.zeros((state_size, action_size), dtype=np.int)
         self.model = {}
+
+    def _sample_model(self):
+        # sample state
+        past_states = [k[0] for k in self.model.keys()]
+        sampled_state = past_states[npr.choice(len(past_states))]
+        # sample action previously taken from sampled state
+        past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
+        sampled_action = past_actions[npr.choice(len(past_actions))]
+        # get reward, state_next, done, and make exp
+        exp = (sampled_state, sampled_action) + self.model[(sampled_state, sampled_action)][1]
         
-    def _get_dyna_indices(self):
-        p = np.ones(len(self.experiences)) / len(self.experiences)
-        return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
-
-    def _add_intrinsic_reward(self, exp):
-        state, action, state_next, reward, done = exp
-        reward += self.kappa * np.sqrt(self.tau[state, action])
-        return state, action, state_next, reward, done
-
+        return exp
+        
     def update(self, current_exp, **kwargs):
+        # perform online update first
+        td_error = super().update(current_exp, **kwargs)
+
         state, action, next_state, reward, done = current_exp
 
-        # update (deterministic) model and state predecessors
-        self.model[(state, action)] = (next_state, reward, done)
+        # update (deterministic) model
+        self.model[(state, action)] = self.num_updates, (next_state, reward, done)
 
-        # update time elapsed since state-action pair last seen
-        self.tau += 1
-        self.tau[current_exp[0], current_exp[1]] = 0
-
-        # remember sliding window of past 1000 experiences
-        self.experiences.append((state, action))
-        self.experiences = self.experiences[-1000:]
-
-        # perform online update first
-        q_error = self.update_q(current_exp, **kwargs)
-
-        mem_indices = self._get_dyna_indices()
-        mem = [self.experiences[i] for i in mem_indices]
-        for exp in mem:
-            exp += self.model[exp]
-            exp = self._add_intrinsic_reward(exp)
+        for i in range(self.num_recall):
+            exp = self._sample_model()
             self.prioritized_states[exp[0]] += 1
-            # perform off-policy update using recalled memories
-            q_error = self.update_q(exp)
+            super().update(exp)
 
-        td_error = {'q': np.linalg.norm(q_error)}
         return td_error
+
+class DynaQPlus(DynaQ):
+    
+    def __init__(self, state_size, action_size, num_recall, kappa=1e-4, **kwargs):
+        super().__init__(state_size, action_size, num_recall, **kwargs)
+        self.kappa = kappa
+
+    def _sample_model(self):
+        # sample a state
+        past_states = [k[0] for k in self.model.keys()]
+        sampled_state = past_states[npr.choice(len(past_states))]
+
+        # sample action from any possible action
+        possible_actions = np.arange(self.action_size)
+        past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
+        sampled_action = possible_actions[npr.choice(len(possible_actions))]
+        if sampled_action not in past_actions:
+            # initial model that action leads to same state with reward zero
+            reward = 0
+            next_state = sampled_state
+            done = False
+            # add state-action to model
+            self.model[(sampled_state, sampled_action)] = 1, (next_state, reward, done)
+
+        t_last_update, (next_state, reward, done) = self.model[(sampled_state, sampled_action)]
+
+        # bonus reward for actions not tried in a while
+        reward += self.kappa * np.sqrt(self.num_updates - t_last_update)
+
+        exp = (sampled_state, sampled_action, next_state, reward, done)
+        return exp
 
 class PSQ(TDQ):
 
@@ -255,6 +288,7 @@ class TDSR:
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.prioritized_states = np.zeros(state_size, dtype=np.int)
+        self.num_updates = 0
 
     def Q_estimates(self, state):
         return self.M[:, state, :] @ self.w
@@ -268,7 +302,7 @@ class TDSR:
                 action = npr.choice(self.action_size)
             else:
                 Qs = self.Q_estimates(state)
-                action = np.argmax(Qs)
+                action = npr.choice(np.flatnonzero(np.isclose(Qs, Qs.max())))
         return action
 
     def update_w(self, current_exp):
@@ -306,6 +340,7 @@ class TDSR:
     def update(self, current_exp, **kwargs):
         m_error = self.update_sr(current_exp, **kwargs)
         w_error = self.update_w(current_exp)
+        self.num_updates += 1
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error
 
@@ -386,7 +421,7 @@ class DynaSR(TDSR):
         return td_error
 
 
-class PSSR(TDSR):
+class PARSR(TDSR):
 
     def __init__(self, state_size, action_size, num_recall, theta=1e-6, goal_pri=True, online=False, **kwargs):
         super().__init__(state_size, action_size, **kwargs)

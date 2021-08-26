@@ -7,8 +7,9 @@ idx = int(sys.argv[2])
 df = pd.read_csv('hyperparameters.csv')
 if idx < len(df):
     hyperparameters = df.iloc[idx]
-    seed = hyperparameters['seed']
     agent = hyperparameters['agent']
-    res = hyperparameters['res']
+    poltype = hyperparameters['poltype']
+    lr = hyperparameters['lr']
+    num_recall = hyperparameters['num_recall']
     
-    os.system(f'python {script} --seed {seed} --agent {agent} --res {res}') 
+    os.system(f'python {script} --agent {agent} --poltype {poltype} --lr {lr} --num_recall {num_recall} --output results_policy_reval.csv') 

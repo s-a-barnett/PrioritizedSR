@@ -1,5 +1,6 @@
 import numpy as np
 import utils
+from itertools import product
 
 class SimpleGrid:
     def __init__(self, size, block_pattern='empty', 
@@ -33,6 +34,8 @@ class SimpleGrid:
         else:
             self.goal_pos = [self.get_free_spot()]
         if agent_pos != None:
+            assert type(agent_pos[0]) == int
+            assert len(agent_pos) == 2
             self.agent_pos = agent_pos
         else:
             self.agent_pos = self.get_free_spot()
@@ -90,15 +93,31 @@ class SimpleGrid:
             assert k == (self.grid_size[1] // 9)
 
             blocks_a = []; blocks_b = []; blocks_c = []
-            for x in range(k):
-                for y in range(k):
-                    blocks_b.append([4*k + x, 5*k + y])
-                    for i in range(1, 4):
-                        blocks_a.append([i*k + x, 2*k + y])
-                    for i in range(3):
-                        blocks_c.append([i*k + x, 7*k + y])
+            for x, y in product(range(k), range(k)):
+                 blocks_b.append([4*k + x, 5*k + y])
+                 for i in range(1, 4):
+                     blocks_a.append([i*k + x, 2*k + y])
+                 for i in range(3):
+                     blocks_c.append([i*k + x, 7*k + y])
 
             blocks = blocks_a + blocks_b + blocks_c
+            return blocks
+        if pattern == 'dual_linear':
+            assert self.grid_size == (3, 10)
+            blocks = [[1, i] for i in range(10)]
+            return blocks
+        if pattern == 'tolman':
+            assert self.grid_size == (10, 10)
+            blocks = [[0, 0], [9, 0]]
+            blocks += [[i, 0] for i in range(3, 7)]
+            blocks.append([0, 2])
+            blocks += [[i, 2] for i in range(3, 10)]
+            blocks += [[0, 3], [3, 3], [4, 3], [8, 3], [9, 3]]
+            blocks += [[0, 5], [3, 5]]
+            blocks += [[i, 5] for i in range(6, 10)]
+            blocks += [[i, 6] for i in range(4)]
+            blocks += [[6, 6], [9, 6]]
+            blocks += [[i, j] for i, j in product(range(2, 8), range(8, 10))]
             return blocks
         
     @property
@@ -112,7 +131,7 @@ class SimpleGrid:
         return grid
     
     def move_agent(self, direction):
-        if self.agent_pos not in self.goal_pos:
+        if (self.agent_pos not in self.goal_pos) or (self.reward_val == 0):
             new_pos = self.agent_pos + direction
             if self.check_target(new_pos):
                 self.agent_pos = list(new_pos)
@@ -137,10 +156,6 @@ class SimpleGrid:
     def observation(self):
         if self.obs_mode == 'onehot':
             return utils.onehot(self.agent_pos[0] * self.grid_size[1] + self.agent_pos[1], self.state_size)
-#        if self.obs_mode == 'twohot':
-#            return self.twohot(self.agent_pos, self.grid_size)
-#        if self.obs_mode == 'geometric':
-#            return (2 * np.array(self.agent_pos) / (self.grid_size-1)) - 1 
         if self.obs_mode == 'visual':
             return env.grid
         if self.obs_mode == 'index':
@@ -151,10 +166,6 @@ class SimpleGrid:
         if self.obs_mode == 'onehot':
             goal_list = [utils.onehot(goal_pos[0] * self.grid_size[1] + goal_pos[1], self.state_size) for goal_pos in self.goal_pos]
             return goal_list
-#        if self.obs_mode == 'twohot':
-#            return self.twohot(self.goal_pos, self.grid_size)
-#        if self.obs_mode == 'geometric':
-#            return (2 * np.array(self.goal_pos) / (self.grid_size-1)) - 1 
         if self.obs_mode == 'visual':
             return env.grid
         if self.obs_mode == 'index':
@@ -184,12 +195,6 @@ class SimpleGrid:
         if self.obs_mode == 'onehot':
             point = self.state_to_point(state)
             return utils.onehot(point[0] * self.grid_size[0] + point[1], self.state_size)
-#        if self.obs_mode == 'twohot':
-#            point = self.state_to_point(state)
-#            return self.twohot(point, self.grid_size)
-#        if self.obs_mode == 'geometric':
-#            point = self.state_to_point(state)
-#            return (2 * np.array(point) / (self.grid_size-1)) - 1 
         if self.obs_mode == 'visual':
             return self.state_to_grid(state)
         if self.obs_mode == 'index':
@@ -215,7 +220,8 @@ class SimpleGrid:
             move_array = np.array([1,0])
         self.move_agent(move_array)
         self.num_steps += 1
-        if self.agent_pos in self.goal_pos:
+        if (self.agent_pos in self.goal_pos) and (self.reward_val != 0):
+            # treat an env with reward 0 as if it has no goal
             self.done = True
             return self.reward_val
         else:
@@ -223,8 +229,4 @@ class SimpleGrid:
 
     def state_to_goal(self, state):
         return self.state_to_obs(state)
-
-class MultiGoalGrid(SimpleGrid):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 

@@ -3,13 +3,14 @@ import numpy.random as npr
 from scipy.special import softmax
 from collections import defaultdict
 import utils
+import random
 
 class TDQ:
     def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, poltype='softmax', Q_init=None):
         self.state_size = state_size
         self.action_size = action_size
 
-        if Q_init == None:
+        if Q_init is None:
             self.Q = np.zeros((action_size, state_size))
         elif np.isscalar(Q_init):
             self.Q = Q_init * npr.randn(action_size, state_size)
@@ -71,7 +72,7 @@ class TDQ:
 
 class DynaQ(TDQ):
 
-    def __init__(self, state_size, action_size, num_recall, kappa=0.0,  **kwargs):
+    def __init__(self, state_size, action_size, num_recall, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.model = {}
@@ -228,7 +229,7 @@ class MDQ(TDQ):
         gain = np.dot(Q_s_new, pi_s_new - pi_s_old)
         gain = np.maximum(gain, 1e-10) # minimum gain
 
-        # log gain term in array for subsequent visualization
+        # record gain term in array for subsequent visualization
         self.gain_array[state, idx_recall, s, a] = gain
 
         # compute need term
@@ -240,8 +241,52 @@ class MDQ(TDQ):
         # return product of gain and need terms
         return gain * need
 
-    def update(self, current_exp, record_recall=False, **kwargs):
+    def update_q_nstep(self, exps, prospective=False):
+        n = len(exps)
+        rewards = np.array([exp[3] for exp in exps]) 
+        discounts = np.array([self.gamma ** i for i in range(n)])
+        nstep_reward = np.dot(rewards, discounts)
+        end_state = exps[-1][2]
+        nstep_reward += (self.gamma ** n) * self.Q[:, end_state].max()
+        st = exps[0][0]; action = exps[0][1]
+        q_error = nstep_reward - self.Q[action, st]
+        if not prospective:
+            self.Q[action, st] += self.learning_rate * q_error
+        return q_error
+
+    def multistep_evb(self, state, exps, idx_recall, beta=5.0):
+        gains = np.zeros(len(exps))
+
+        for i in range(len(exps)):
+            s = exps[i][0]
+            a = exps[i][1]
+
+            # record pi_old as a baseline
+            Q_s_old = self.Q[:, s]
+            pi_s_old = softmax(beta * Q_s_old)
+
+            # compute new Q based on experience to be evaluated
+            Q_s_new = Q_s_old.copy()
+            Q_s_new[a] += self.learning_rate * self.update_q_nstep(exps[i:], prospective=True)
+
+            # compute gain term
+            pi_s_new = softmax(beta * Q_s_new)
+            gain = np.dot(Q_s_new, pi_s_new - pi_s_old)
+            gain = np.maximum(gain, 1e-10) # minimum gain
+            gains[i] = gain
+
+            # record gain term in array for subsequent visualization
+            self.gain_array[state, idx_recall, s, a] += gain
+
+        # use need from last appended state
+        need = self.M[state, exps[-1][0]]
+
+        # evb is sum-product of gain and need terms
+        return np.sum(need * gains)
+
+    def update(self, current_exp, **kwargs):
         self.experiences.append(current_exp)
+        state = current_exp[0]
 
         # perform online update of Q, T, and M
         q_error = self.update_q(current_exp, prospective=(not self.online), **kwargs)
@@ -255,16 +300,38 @@ class MDQ(TDQ):
 
         for k in range(self.num_recall):
             # compute expected value of backup for every possible experience
-            evbs = [{"exp": exp, "evb": self.evb(current_exp[0], exp, k)} for exp in unique_exps]
+            evbs = np.array([self.evb(state, exp, k) for exp in unique_exps])
 
-            # get experience with the best evb
-            best = sorted(evbs, key=lambda x: x["evb"]).pop()
-            best_exp = best["exp"]
-            self.prioritized_states[best_exp[0]] += 1
+            # get single experience with the best evb (random tie-break)
+            evb_max = evbs.max()
+            best_exps = [unique_exps[i] for i in range(len(unique_exps)) if evbs[i] == evb_max]
+            best_exp = [random.choice(best_exps)]
+
+            if k > 0:
+                # get previously recalled experience
+                prev_exp = self.recalled[-1]
+                # find experience with next optimal action
+                final_state = prev_exp[-1][2]
+                Qs = self.Q[:, final_state]
+                next_action = npr.choice(np.flatnonzero(np.isclose(Qs, Qs.max())))
+                cand_exps = [exp for exp in self.experiences if (exp[0] == final_state) and (exp[1] == next_action)]
+                if not cand_exps:
+                    # skip if no candidate experience with corresponding state and action exists
+                    #   applies to terminal states
+                    continue
+                next_exp = cand_exps[-1] # use most recent compatible experience, if multiple
+                # append to previously recalled exp, compute evb
+                nstep_exp = prev_exp + [next_exp]
+                nstep_evb = self.multistep_evb(state, nstep_exp, k)
+                # use as best exp if better than best single backup
+                if nstep_evb > evb_max:
+                    best_exp = nstep_exp
+
+            for i in range(len(best_exp)):
+                q_error = self.update_q_nstep(best_exp[i:])
+                self.prioritized_states[best_exp[i][0]] += 1
+
             self.recalled.append(best_exp)
-
-            # update Q with this experience
-            q_error = self.update_q(best_exp)
 
         td_error = {'q': np.linalg.norm(q_error), 'T': np.linalg.norm(T_error)}
         return td_error
@@ -373,53 +440,69 @@ class TDSR:
 
 class DynaSR(TDSR):
     
-    def __init__(self, state_size, action_size, num_recall, kappa=0.0, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
-        self.experiences = []
-        self.kappa = kappa
-        self.tau = np.zeros((state_size, action_size), dtype=np.int)
         self.model = {}
-        
-    def _get_dyna_indices(self):
-        p = np.ones(len(self.experiences)) / len(self.experiences)
-        return npr.choice(len(self.experiences), self.num_recall, p=p, replace=True)
 
-    def _add_intrinsic_reward(self, exp):
-        state, action, state_next, reward, done = exp
-        reward += self.kappa * np.sqrt(self.tau[state, action])
-        return state, action, state_next, reward, done
+    def _sample_model(self):
+        # sample state
+        past_states = [k[0] for k in self.model.keys()]
+        sampled_state = past_states[npr.choice(len(past_states))]
+        # sample action previously taken from sampled state
+        past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
+        sampled_action = past_actions[npr.choice(len(past_actions))]
+        # get reward, state_next, done, and make exp
+        exp = (sampled_state, sampled_action) + self.model[(sampled_state, sampled_action)][1]
+        
+        return exp
 
     def update(self, current_exp, **kwargs):
+        # perform online update first
+        td_error = super().update(current_exp, **kwargs)
+
         state, action, next_state, reward, done = current_exp
 
-        # update (deterministic) model and state predecessors
-        self.model[(state, action)] = (next_state, reward, done)
+        # update (deterministic) model
+        self.model[(state, action)] = self.num_updates, (next_state, reward, done)
 
-        # update time elapsed since state-action pair last seen
-        self.tau += 1
-        self.tau[current_exp[0], current_exp[1]] = 0
-
-        # remember sliding window of past 1000 experiences
-        self.experiences.append((state, action))
-        self.experiences = self.experiences[-1000:]
-
-        # perform online update first
-        m_error = self.update_sr(current_exp, **kwargs)
-        w_error = self.update_w(current_exp)
-
-        mem_indices = self._get_dyna_indices()
-        mem = [self.experiences[i] for i in mem_indices]
-        for exp in mem:
-            exp += self.model[exp]
-            exp = self._add_intrinsic_reward(exp)
+        for i in range(self.num_recall):
+            exp = self._sample_model()
             self.prioritized_states[exp[0]] += 1
-            # perform off-policy update using recalled memories
-            m_error = self.update_sr(exp)
+            super().update(exp)
 
-        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error
 
+class DynaSRPlus(DynaSR):
+    
+    def __init__(self, state_size, action_size, num_recall, kappa=1e-4, **kwargs):
+        super().__init__(state_size, action_size, num_recall, **kwargs)
+        self.kappa = kappa
+
+    def _sample_model(self):
+        # sample a state
+        past_states = [k[0] for k in self.model.keys()]
+        sampled_state = past_states[npr.choice(len(past_states))]
+
+        # sample action from any possible action
+        possible_actions = np.arange(self.action_size)
+        past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
+        sampled_action = possible_actions[npr.choice(len(possible_actions))]
+        if sampled_action not in past_actions:
+            # initial model that action leads to same state with reward zero
+            reward = 0
+            next_state = sampled_state
+            done = False
+            # add state-action to model
+            self.model[(sampled_state, sampled_action)] = 1, (next_state, reward, done)
+
+        t_last_update, (next_state, reward, done) = self.model[(sampled_state, sampled_action)]
+
+        # bonus reward for actions not tried in a while
+        reward += self.kappa * np.sqrt(self.num_updates - t_last_update)
+
+        exp = (sampled_state, sampled_action, next_state, reward, done)
+        return exp
 
 class PARSR(TDSR):
 
@@ -445,7 +528,7 @@ class PARSR(TDSR):
             error = m_error
         return np.linalg.norm(error)
     
-    def update(self, current_exp, record_recall=False, **kwargs):
+    def update(self, current_exp, **kwargs):
         state, action, next_state, reward, done = current_exp
 
         # update (deterministic) model and state predecessors
@@ -471,8 +554,7 @@ class PARSR(TDSR):
             state, action = self.pqueue.pop()
             self.prioritized_states[state] += 1
             exp = (state, action) + self.model[(state, action)]
-            if record_recall:
-                self.recalled.append(exp)
+            self.recalled.append([exp])
 
             # update M and w based on this experience
             m_error = self.update_sr(exp)
@@ -489,6 +571,72 @@ class PARSR(TDSR):
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error
 
+class PEPARSR(TDSR):
+    
+    def __init__(self, state_size, action_size, num_recall, pri_strength=0.7, bias=0.4, goal_pri=True, online=False, **kwargs):
+        super().__init__(state_size, action_size, **kwargs)
+        self.num_recall = num_recall
+        self.pri_strength = pri_strength
+        self.bias = bias
+        self.goal_pri = goal_pri
+        self.online = online
+        self.model = {}
+        self.priorities = {}
+
+    def priority(self, m_error, current_exp):
+        if self.goal_pri:
+            # priority given by temporal difference of Q
+            error = np.dot(m_error, self.w) - self.w[current_exp[0]] + current_exp[3]
+        else:
+            # priority given by temporal difference of successor representation
+            error = m_error
+        return np.linalg.norm(error)
+
+    def _sample_model(self):
+        sa_pairs_all = list(self.model.keys())
+        N = len(sa_pairs_all)
+        pri_vals = np.array(list(self.priorities.values()))
+        pri_vals += 1e-10
+        weights = np.power(N * pri_vals, -self.bias)
+        weights /= weights.max()
+        p = pri_vals ** self.pri_strength
+        p /= p.sum()
+        sampled_idxs = npr.choice(len(sa_pairs_all), p=p, replace=True, size=self.num_recall)
+        sa_pairs = [sa_pairs_all[i] for i in sampled_idxs]
+        exps = [sa + self.model[sa] for sa in sa_pairs]
+        sampled_weights = [weights[i] for i in sampled_idxs]
+        return exps, sampled_weights
+
+    def update(self, current_exp, **kwargs):
+        state, action, next_state, reward, done = current_exp
+
+        # update (deterministic) model
+        self.model[(state, action)] = (next_state, reward, done)
+
+        # compute value of update
+        m_error = self.update_sr(current_exp, prospective=(not self.online), **kwargs)
+        w_error = self.update_w(current_exp) if self.online else 0.0
+
+        # compute priority for the update, add to priorities
+        priority = self.priority(m_error, current_exp)
+        self.priorities[(state, action)] = priority
+
+        self.recalled = []
+        exps, weights = self._sample_model()
+
+        for exp, weight in zip(exps, weights):
+            self.recalled.append([exp])
+
+            # compute importance weight
+            self.learning_rate *= weight
+
+            # update M and w
+            m_error = self.update_sr(exp)
+            w_error = self.update_w(exp)
+            self.learning_rate /= weight
+
+        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+        return td_error
 
 class MDSR(TDSR):
 
@@ -538,7 +686,7 @@ class MDSR(TDSR):
         # return product of gain and need terms
         return gain * need
 
-    def update(self, current_exp, record_recall=False, **kwargs):
+    def update(self, current_exp, **kwargs):
         self.experiences.append(current_exp)
 
         # perform online update of M and w
@@ -558,7 +706,7 @@ class MDSR(TDSR):
             best = sorted(evbs, key=lambda x: x["evb"]).pop()
             best_exp = best["exp"]
             self.prioritized_states[best_exp[0]] += 1
-            self.recalled.append(best_exp)
+            self.recalled.append([best_exp])
 
             # update successor representation with this experience
             m_error = self.update_sr(best_exp)

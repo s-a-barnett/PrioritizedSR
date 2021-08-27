@@ -295,6 +295,8 @@ class MDQ(TDQ):
 
         # list of possible experiences to update on
         unique_exps = list(set(self.experiences))
+        # filter out 'same state' experiences
+        unique_exps = [exp for exp in unique_exps if exp[0] != exp[2]]
 
         self.recalled = []
 

@@ -11,7 +11,7 @@ gamma = 0.95
 beta  = 5
 epsilon = 1e-1
 
-NUM_RUNS = 100
+NUM_RUNS = 500
 NUM_INTRO = 20
 EPISODE_LENGTH = 25000
 
@@ -82,7 +82,7 @@ def main(args):
             _ = agent.update(experience)
 
         # record Q value for latent task
-        Qs_latent[i] = agent.Q
+        Qs_latent[i] = agent.Q.copy()
 
         # train with alternating starting states
         agent.num_recall = 0
@@ -123,7 +123,7 @@ def main(args):
             _ = agent.update(experience)
 
         # record Q value after policy reval
-        Qs_reval[i] = agent.Q
+        Qs_reval[i] = agent.Q.copy()
 
     # find median Q for each task
     Q_latent = np.median(Qs_latent, axis=0)

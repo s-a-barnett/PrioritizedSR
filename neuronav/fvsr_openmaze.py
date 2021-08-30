@@ -17,13 +17,13 @@ NUM_RUNS = 100
 NUM_INTRO = 20
 NUM_TRAIN = 50
 MAX_EPISODE_LENGTH = 10000
-streak_length = 5
+streak_length = 3
 
 grid_size = (6, 9)
 
 def agent_factory(args, state_size, action_size):
     if args.agent == 'mdq':
-        agent = algs.MDQ(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, online=True)
+        agen5t = algs.MDQ(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, online=True)
     elif args.agent == 'qparsr':
         agent = algs.PARSR(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, goal_pri=True)
     elif args.agent == 'mparsr':
@@ -79,6 +79,9 @@ def openmaze_sim(args):
 
     # accumulate every possible experience not in goal state
     agent.num_recall = 0
+    if 'PARSR' in type(agent).__name__:
+        agent.online = True
+
     for i, j, a in itertools.product(range(grid_size[0]), range(grid_size[1]), range(env.action_size)):
         if [i, j] not in (env.blocks + [goal_pos]):
             env.reset(agent_pos=[i, j], goal_pos=goal_pos, reward_val=0)
@@ -90,28 +93,35 @@ def openmaze_sim(args):
             exp = (state, action, state_next, reward, done)
             agent.update(exp)
 
-    # reinitialize T and Q for MDQ agent
     # T assumes a uniformly random policy
-    # Q goes back to zeros
+    T = np.zeros((env.state_size, env.state_size))
+
+    for i, j, a in itertools.product(range(grid_size[0]), range(grid_size[1]), range(env.action_size)):
+        if [i, j] not in (env.blocks + [goal_pos]):
+            env.reset(agent_pos=[i, j], goal_pos=goal_pos, reward_val=0)
+            state = env.observation
+            _ = env.step(a)
+            state_next = env.observation
+            T[state, state_next] += (1 / env.action_size)
+
+    # transitions from goal state to random valid starting state
+    invalid_states = [env.grid_to_state(pos) for pos in (env.blocks + [goal_pos])]
+    for i in range(env.state_size):
+        if i not in invalid_states:
+            T[env.grid_to_state(goal_pos), i] = 1 / (env.state_size - len(invalid_states))
+
     if type(agent).__name__ == 'MDQ':
-        agent.T = np.zeros((env.state_size, env.state_size))
-
-        for i, j, a in itertools.product(range(grid_size[0]), range(grid_size[1]), range(env.action_size)):
-            if [i, j] not in (env.blocks + [goal_pos]):
-                env.reset(agent_pos=[i, j], goal_pos=goal_pos, reward_val=0)
-                state = env.observation
-                _ = env.step(a)
-                state_next = env.observation
-                agent.T[state, state_next] += (1 / env.action_size)
-
-        # transitions from goal state to random valid starting state
-        invalid_states = [env.grid_to_state(pos) for pos in (env.blocks + [goal_pos])]
-        for i in range(env.state_size):
-            if i not in invalid_states:
-                agent.T[env.grid_to_state(goal_pos), i] = 1 / (env.state_size - len(invalid_states))
-
+        # reinitialize T and Q for MDQ agent
+        agent.T = T
         agent.update_M()
+        # Q goes back to zeros
         agent.Q = np.zeros_like(agent.Q)
+    elif 'PARSR' in type(agent).__name__:
+        # update M at goal state
+        M = np.linalg.pinv(np.eye(env.state_size) - agent.gamma * T)
+        M_goal = M[8]
+        agent.M[:, 8, :] = M_goal
+        agent.online = False
 
     # complete training episodes
     start_recalls = []

@@ -4,6 +4,19 @@ import matplotlib as mpl
 from representations import eig
 import utils
 import copy
+from itertools import product
+
+def plot_V(Q, env, policy_arrows=True):
+    plt.imshow(utils.mask_grid(Q.max(0).reshape(env.grid_size), env.blocks));
+    if policy_arrows:
+        actions = Q.argmax(0).reshape(env.grid_size)
+        coords = {0: (0, 0.5, 0, -0.5), 1: (0, -0.5, 0, 0.5), 2: (0.5, 0, -0.5, 0), 3: (-0.5, 0, 0.5, 0)}
+        for i, j in product(range(env.grid_size[0]), range(env.grid_size[1])):
+            if [i, j] not in env.blocks:
+                x, y, dx, dy = coords[actions[i, j]]
+                x += j
+                y += i
+                plt.arrow(x, y, dx, dy, width=0.1, head_length=0.3, head_starts_at_zero=True, color='r');
 
 def plot_place_fields(agent, env, epsilon=0.0, beta=5.0):
     M = agent.get_M_states(epsilon=epsilon, beta=beta).copy()

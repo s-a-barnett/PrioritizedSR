@@ -9,19 +9,20 @@ import argparse
 # fixed parameters
 gamma = 0.95
 beta  = 5
-epsilon = 1e-1
 
-NUM_RUNS = 500
+NUM_RUNS = 10
 NUM_INTRO = 20
 EPISODE_LENGTH = 25000
 
 def agent_factory(args, state_size, action_size):
     if args.agent == 'dynasr':
-        agent = algs.DynaSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma, poltype=args.poltype)
+        agent = algs.DynaSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma)
     elif args.agent == 'qparsr':
-        agent = algs.PARSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma, poltype=args.poltype, goal_pri=True)
+        agent = algs.PARSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma, goal_pri=True)
     elif args.agent == 'mparsr':
-        agent = algs.PARSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma, poltype=args.poltype, goal_pri=False)
+        agent = algs.PARSR(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma, goal_pri=False)
+    elif args.agent == 'mdq':
+        agent = algs.MDQ(state_size, action_size, num_recall=args.num_recall, learning_rate=args.lr, gamma=gamma)
     else:
         raise ValueError('Invalid agent type: %s' % args.agent)
 
@@ -33,7 +34,7 @@ def test_from_Q(Q, env, ap, gp, rw, args):
     return len(experiences)
 
 def main(args):
-    npr.seed(0)
+    npr.seed(args.seed)
     grid_size = (10, 10)
     agent_pos = [[7, 0], [8, 8]]
     goal_pos = [[1, 9], [8, 9]]
@@ -49,14 +50,14 @@ def main(args):
 
         # train on latent learning task
         agent.num_recall = 0
-        if 'PARSR' in type(agent).__name__:
+        if ('PARSR' in type(agent).__name__) or (type(agent).__name__ == 'MDQ'):
             agent.online = True
 
         env.reset(agent_pos=agent_pos[0], reward_val=0)
         state = env.observation
         experiences = []
         for j in range(EPISODE_LENGTH):
-            action = agent.sample_action(state, beta=beta, epsilon=epsilon)
+            action = agent.sample_action(state, beta=beta)
             reward = env.step(action)
             state_next = env.observation
             done = env.done
@@ -68,7 +69,7 @@ def main(args):
 
         # add in reward R1
         agent.num_recall = args.num_recall
-        if 'PARSR' in type(agent).__name__:
+        if ('PARSR' in type(agent).__name__) or (type(agent).__name__ == 'MDQ'):
             agent.online = False
 
         for j in range(NUM_INTRO):
@@ -86,7 +87,7 @@ def main(args):
 
         # train with alternating starting states
         agent.num_recall = 0
-        if 'PARSR' in type(agent).__name__:
+        if ('PARSR' in type(agent).__name__) or (type(agent).__name__ == 'MDQ'):
             agent.online = True
 
         for j in range(NUM_INTRO):
@@ -94,7 +95,7 @@ def main(args):
             state = env.observation
             experiences = []
             for k in range(EPISODE_LENGTH):
-                action = agent.sample_action(state, beta=beta, epsilon=epsilon)
+                action = agent.sample_action(state, beta=beta)
                 reward = env.step(action)
                 state_next = env.observation
                 done = env.done
@@ -109,7 +110,7 @@ def main(args):
 
         # introduce agent to new goal
         agent.num_recall = args.num_recall
-        if 'PARSR' in type(agent).__name__:
+        if ('PARSR' in type(agent).__name__) or (type(agent).__name__ == 'MDQ'):
             agent.online = True
 
         for j in range(NUM_INTRO):
@@ -125,27 +126,24 @@ def main(args):
         # record Q value after policy reval
         Qs_reval[i] = agent.Q.copy()
 
-    # find median Q for each task
-    Q_latent = np.median(Qs_latent, axis=0)
-    Q_reval  = np.median(Qs_reval, axis=0)
-
     # get run lengths for each of these tasks
-    latent_length = test_from_Q(Q_latent, env, agent_pos[0], goal_pos[0], reward_val[0], args)
-    reval_length = test_from_Q(Q_reval, env, agent_pos[0], goal_pos[1], reward_val[1], args)
+    latent_lengths = np.array([test_from_Q(Qs_latent[i], env, agent_pos[0], goal_pos[0], reward_val[0], args) for i in range(NUM_RUNS)])
+    reval_lengths = np.array([test_from_Q(Qs_reval[i], env, agent_pos[0], goal_pos[1], reward_val[1], args) for i in range(NUM_RUNS)])
 
-    learns_latent = (latent_length == optimal_episode_lengths['S1R1'])
-    learns_reval  = (reval_length  == optimal_episode_lengths['S1R2'])
+    learns_latent = (latent_lengths == optimal_episode_lengths['S1R1'])
+    learns_reval  = (reval_lengths  == optimal_episode_lengths['S1R2'])
+    learns_both   = learns_latent * learns_reval
 
     with open(args.output, 'a') as f:
-        f.write(','.join([str(args.agent), str(args.poltype), str(args.lr), str(args.num_recall), str(learns_latent), str(learns_reval)]) + '\n')
+        f.write(','.join([str(args.agent), str(args.seed), str(args.lr), str(args.num_recall), str(np.mean(learns_latent)), str(np.mean(learns_reval)), str(np.mean(learns_both))]) + '\n')
 
     return 0
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--num_recall', type=int, default=10000, help='number of recalls')
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
-    parser.add_argument('--poltype', type=str, default='softmax', help='softmax or egreedy')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
     parser.add_argument('--output', type=str, help='output file')
     args = parser.parse_args()

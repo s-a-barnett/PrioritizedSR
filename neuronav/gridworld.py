@@ -95,10 +95,8 @@ class SimpleGrid:
             blocks_a = []; blocks_b = []; blocks_c = []
             for x, y in product(range(k), range(k)):
                  blocks_b.append([4*k + x, 5*k + y])
-                 for i in range(1, 4):
-                     blocks_a.append([i*k + x, 2*k + y])
-                 for i in range(3):
-                     blocks_c.append([i*k + x, 7*k + y])
+                 blocks_a += [[i*k + x, 2*k + y] for i in range(1, 4)]
+                 blocks_c += [[i*k + x, 7*k + y] for i in range(3)]
 
             blocks = blocks_a + blocks_b + blocks_c
             return blocks
@@ -107,17 +105,22 @@ class SimpleGrid:
             blocks = [[1, i] for i in range(10)]
             return blocks
         if pattern == 'tolman':
-            assert self.grid_size == (10, 10)
-            blocks = [[0, 0], [9, 0]]
-            blocks += [[i, 0] for i in range(3, 7)]
-            blocks.append([0, 2])
-            blocks += [[i, 2] for i in range(3, 10)]
-            blocks += [[0, 3], [3, 3], [4, 3], [8, 3], [9, 3]]
-            blocks += [[0, 5], [3, 5]]
-            blocks += [[i, 5] for i in range(6, 10)]
-            blocks += [[i, 6] for i in range(4)]
-            blocks += [[6, 6], [9, 6]]
-            blocks += [[i, j] for i, j in product(range(2, 8), range(8, 10))]
+            assert self.grid_size[0] == self.grid_size[1]
+            assert self.grid_size[0] % 10 == 0
+            k = self.grid_size[0] // 10
+            blocks = []
+
+            for x, y in product(range(k), range(k)):
+                blocks += [[x, y], [9*k + x, y]]
+                blocks += [[i*k + x, y] for i in range(3, 7)]
+                blocks.append([x, 2*k + y])
+                blocks += [[i*k + x, 2*k + y] for i in range(3, 10)]
+                blocks += [[x, 3*k + y], [3*k + x, 3*k + y], [4*k + x, 3*k + y], [8*k + x, 3*k + y], [9*k + x, 3*k + y]]
+                blocks += [[x, 5*k + y], [3*k + x, 5*k + y]]
+                blocks += [[i*k + x, 5*k + y] for i in range(6, 10)]
+                blocks += [[i*k + x, 6*k + y] for i in range(4)]
+                blocks += [[6*k + x, 6*k + y], [9*k + x, 6*k + y]]
+                blocks += [[i*k + x, j*k + y] for i, j in product(range(2, 8), range(8, 10))]
             return blocks
         
     @property

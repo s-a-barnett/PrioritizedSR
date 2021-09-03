@@ -5,13 +5,13 @@ import progressbar
 import utils
 from gridworld import SimpleGrid
 import argparse
+import itertools
 
 # fixed parameters
 gamma = 0.95
 beta  = 5
 
 NUM_RUNS = 10
-NUM_INTRO = 20
 EPISODE_LENGTH = 25000
 
 def agent_factory(args, state_size, action_size):
@@ -35,11 +35,17 @@ def test_from_Q(Q, env, ap, gp, rw, args):
 
 def main(args):
     npr.seed(args.seed)
-    grid_size = (10, 10)
-    agent_pos = [[7, 0], [8, 8]]
-    goal_pos = [[1, 9], [8, 9]]
+    r = args.res
+    # agent has chance to be introduced to every square in goal_pos
+    NUM_INTRO = np.maximum(20, r ** 2)
+    grid_size = (10*r, 10*r)
+    agent_pos = [[7*r, 0], [8*r, 8*r]]
+    goal_pos = [[], []]
+    for x, y in itertools.product(range(r), range(r)):
+        goal_pos[0] += [[r + x, 9*r + y]]
+        goal_pos[1] += [[8*r + x, 9*r + y]]
     reward_val = [10, 20]
-    optimal_episode_lengths = {'S1R1': 19, 'S1R2': 20, 'S2R2': 1}
+    optimal_episode_lengths = {'S1R1': 16*r + 3, 'S1R2': 18*r + 2, 'S2R2': r}
 
     env = SimpleGrid(grid_size, block_pattern='tolman')
     Qs_latent = np.zeros((NUM_RUNS, env.action_size, env.state_size))
@@ -73,7 +79,7 @@ def main(args):
             agent.online = True
 
         for j in range(NUM_INTRO):
-            env.reset(agent_pos=goal_pos[0], goal_pos=goal_pos[0], reward_val=reward_val[0])
+            env.reset(agent_pos=goal_pos[0][j % (r**2)], goal_pos=goal_pos[0], reward_val=reward_val[0])
             state = env.observation
             action = npr.choice(env.action_size)
             reward = env.step(action)
@@ -114,7 +120,7 @@ def main(args):
             agent.online = True
 
         for j in range(NUM_INTRO):
-            env.reset(agent_pos=goal_pos[1], goal_pos=goal_pos[1], reward_val=reward_val[1])
+            env.reset(agent_pos=goal_pos[1][j % (r**2)], goal_pos=goal_pos[1], reward_val=reward_val[1])
             state = env.observation
             action = npr.choice(env.action_size)
             reward = env.step(action)
@@ -135,13 +141,14 @@ def main(args):
     learns_both   = learns_latent * learns_reval
 
     with open(args.output, 'a') as f:
-        f.write(','.join([str(args.agent), str(args.seed), str(args.lr), str(args.num_recall), str(np.mean(learns_latent)), str(np.mean(learns_reval)), str(np.mean(learns_both))]) + '\n')
+        f.write(','.join([str(args.agent), str(args.seed), str(args.res), str(args.lr), str(args.num_recall), str(np.mean(learns_latent)), str(np.mean(learns_reval)), str(np.mean(learns_both))]) + '\n')
 
     return 0
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='random seed')
+    parser.add_argument('--res', type=int, default=1, help='resolution of gridworld')
     parser.add_argument('--num_recall', type=int, default=10000, help='number of recalls')
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')

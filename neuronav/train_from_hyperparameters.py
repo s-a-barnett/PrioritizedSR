@@ -12,4 +12,4 @@ if idx < len(df):
     lr = hyperparameters['lr']
     num_recall = hyperparameters['num_recall']
     
-    os.system(f'python {script} --agent {agent} --seed {seed} --lr {lr} --num_recall {num_recall} --output results_policy_reval.csv') 
+    os.system(f'python {script} --agent {agent} --seed {seed} --lr {lr} --num_recall {num_recall} --output results_policy_reval_online.csv') 

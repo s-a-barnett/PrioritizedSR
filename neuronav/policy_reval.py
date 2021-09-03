@@ -70,7 +70,7 @@ def main(args):
         # add in reward R1
         agent.num_recall = args.num_recall
         if ('PARSR' in type(agent).__name__) or (type(agent).__name__ == 'MDQ'):
-            agent.online = False
+            agent.online = True
 
         for j in range(NUM_INTRO):
             env.reset(agent_pos=goal_pos[0], goal_pos=goal_pos[0], reward_val=reward_val[0])

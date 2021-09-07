@@ -122,6 +122,27 @@ class SimpleGrid:
                 blocks += [[6*k + x, 6*k + y], [9*k + x, 6*k + y]]
                 blocks += [[i*k + x, j*k + y] for i, j in product(range(2, 8), range(8, 10))]
             return blocks
+        if 'detour' in pattern:
+            assert self.grid_size[0] == self.grid_size[1]
+            assert self.grid_size[0] % 10 == 0
+            k = self.grid_size[0] // 10
+            blocks = []
+
+            for x, y in product(range(k), range(k)):
+                blocks += [[i*k + x, j*k + y] for i, j in product([0, 1], range(10))]
+                blocks += [[i*k + x, j*k + y] for i, j in product(range(6, 10), [8, 9])]
+                blocks += [[i*k + x, j*k + y] for i, j in product(range(5, 9), range(2, 7))]
+                blocks += [[3*k + x, i*k + y] for i in range(2, 7)]
+                blocks += [[i*k + x, y] for i in range(5, 10)]
+                blocks += [[2*k + x, y], [3*k + x, y], [2*k + x, 8*k + y], [3*k + x, 8*k + y], [5*k + x, 8*k + y], [2*k + x, 9*k + y]]
+            if pattern == 'detour_before':
+                return blocks
+            elif pattern == 'detour_after':
+                for x, y in product(range(k), range(k)):
+                    blocks += [[4*k + x, 5*k + y]]
+                return blocks
+            else:
+                raise ValueError('unknown pattern')
         
     @property
     def grid(self):

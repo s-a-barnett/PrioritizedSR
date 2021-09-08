@@ -13,17 +13,15 @@ lr = 1.0
 beta  = 5
 num_recall = 20
 
-NUM_RUNS = 100
 NUM_INTRO = 20
 NUM_TRAIN = 50
 MAX_EPISODE_LENGTH = 10000
-streak_length = 3
 
 grid_size = (6, 9)
 
 def agent_factory(args, state_size, action_size):
     if args.agent == 'mdq':
-        agen5t = algs.MDQ(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, online=True)
+        agent = algs.MDQ(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, online=True)
     elif args.agent == 'qparsr':
         agent = algs.PARSR(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, goal_pri=True)
     elif args.agent == 'mparsr':
@@ -33,7 +31,7 @@ def agent_factory(args, state_size, action_size):
 
     return agent
 
-def count_replay_events(recalls_list):
+def count_replay_events(recalls_list, args):
     replay_counts = {'f': 0, 'r': 0}
 
     def flatten_recalls(recalls):
@@ -59,7 +57,7 @@ def count_replay_events(recalls_list):
         recall_string = get_recall_string(recalls)
         streak_tuples = list((c, len(list(y))) for (c, y) in itertools.groupby(recall_string) if c in ['f', 'r'])
         for tup in streak_tuples:
-            if tup[1] >= streak_length:
+            if tup[1] >= args.streak:
                 streaks[tup[0]] += 1
         return streaks
 
@@ -121,7 +119,7 @@ def openmaze_sim(args):
         M = np.linalg.pinv(np.eye(env.state_size) - agent.gamma * T)
         M_goal = M[8]
         agent.M[:, 8, :] = M_goal
-        agent.online = False
+        # agent.online = False
 
     # complete training episodes
     start_recalls = []
@@ -160,12 +158,12 @@ def openmaze_sim(args):
 def main(args):
     npr.seed(0)
     replay_events = {'start_forward': 0, 'end_forward': 0, 'start_reverse': 0, 'end_reverse': 0}
-    for i in progressbar.progressbar(range(NUM_RUNS)):
+    for i in progressbar.progressbar(range(args.num_runs)):
         start_recalls, end_recalls = openmaze_sim(args)
-        start_counts = count_replay_events(start_recalls)
+        start_counts = count_replay_events(start_recalls, args)
         replay_events['start_forward'] += start_counts['f']
         replay_events['start_reverse'] += start_counts['r']
-        end_counts = count_replay_events(end_recalls)
+        end_counts = count_replay_events(end_recalls, args)
         replay_events['end_forward'] += end_counts['f']
         replay_events['end_reverse'] += end_counts['r']
 
@@ -179,6 +177,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', type=str, default='mdq', help='algorithm')
+    parser.add_argument('--streak', type=int, default=5, help='length of f/r streak to count')
+    parser.add_argument('--num_runs', type=int, default=100, help='number of runs')
     parser.add_argument('--output', type=str, help='output file')
     args = parser.parse_args()
     main(args)

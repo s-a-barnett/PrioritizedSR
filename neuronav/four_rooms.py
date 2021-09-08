@@ -21,10 +21,10 @@ def agent_factory(args, state_size, action_size):
         agent = algs.DynaSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynasrplus':
         agent = algs.DynaSR(state_size, action_size, args.num_recall, kappa=1e-3, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'pssr':
-        agent = algs.PSSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True)
-    elif args.agent == 'mpssr':
-        agent = algs.PSSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=False)
+    elif args.agent == 'qparsr':
+        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True, online=True)
+    elif args.agent == 'mparsr':
+        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=False, online=True)
     elif args.agent == 'tdq':
         agent = algs.TDQ(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynaq':
@@ -33,6 +33,8 @@ def agent_factory(args, state_size, action_size):
         agent = algs.DynaQ(state_size, action_size, args.num_recall, kappa=1e-3, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'psq':
         agent = algs.PSQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
+    elif args.agent == 'mdq':
+        agent = algs.MDQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, online=True)
     else:
         raise ValueError('Invalid agent type: %s' % args.agent)
 
@@ -81,15 +83,15 @@ def main(args):
 
     if not args.no_logs:
         ## uncomment the line below for more comprehensive (but more memory-intensive) logging
-        # logger.logs['agent'] = agent
+        if args.full_agent_logging:
+            logger.logs['agent'] = agent
 
         logger.logs['agent_prioritized_states'] = agent.prioritized_states
         if 'sr' in args.agent:
             logger.logs['agent_M'] = agent.get_M_states(beta=args.beta)
             logger.logs['agent_w'] = agent.w
-            logger.logs['agent_Q'] = agent.M @ agent.w
-        else:
-            logger.logs['agent_Q'] = agent.Q
+
+        logger.logs['agent_Q'] = agent.Q
 
         if args.log_name is None:
             log_name = args.agent + '_' + str(uuid.uuid4())
@@ -113,6 +115,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate for agent')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for agent')
     parser.add_argument('--no_logs', action='store_true', help='storing logs as pkl')
+    parser.add_argument('--full_agent_logging', action='store_true', help='whether to store full agent object')
     parser.add_argument('--log_name', type=str, help='custom name for log file')
     parser.add_argument('--sarsa', type=bool, default=True, help='are updates on-policy or off-policy')
     args = parser.parse_args()

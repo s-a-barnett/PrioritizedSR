@@ -301,6 +301,10 @@ class MDQ(TDQ):
         self.recalled = []
 
         for k in range(self.num_recall):
+            # don't loop if there aren't any experiences
+            if not unique_exps:
+                break
+
             # compute expected value of backup for every possible experience
             evbs = np.array([self.evb(state, exp, k) for exp in unique_exps])
 

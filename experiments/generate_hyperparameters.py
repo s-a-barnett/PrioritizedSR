@@ -8,4 +8,4 @@ seeds = list(range(10))
 
 index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds], names=['agent', 'lr', 'num_recall', 'seed'])
 df = pd.DataFrame(index = index).reset_index()
-df.to_csv('hyperparameters.csv')
+df.to_csv('hyperparameters.csv', index=False)

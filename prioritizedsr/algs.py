@@ -2,7 +2,7 @@ import numpy as np
 import numpy.random as npr
 from scipy.special import softmax
 from collections import defaultdict
-import utils
+from . import utils
 import random
 
 class TDQ:

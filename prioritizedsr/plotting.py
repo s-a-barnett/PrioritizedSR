@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from representations import eig
-import utils
+from .representations import eig
+from . import utils
 import copy
 from itertools import product
 

@@ -2,15 +2,15 @@ import copy
 import argparse
 import numpy as np
 import numpy.random as npr
-import algs
 import progressbar
-import utils
-from gridworld import SimpleGrid
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 import time
 import pickle
 import uuid
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from prioritizedsr import algs, utils
+from prioritizedsr.gridworld import SimpleGrid
 
 MAX_TRAINING_EPISODES = 100
 NUM_BLOCKSTEPS        = 40

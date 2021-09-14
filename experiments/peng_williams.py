@@ -1,11 +1,13 @@
 import numpy as np
 import numpy.random as npr
-import algs
 import progressbar
-import utils
-from gridworld import SimpleGrid
 from itertools import product
 import argparse
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from prioritizedsr import algs, utils
+from prioritizedsr.gridworld import SimpleGrid
 
 # paramaters fixed from original experiment
 epsilon = 0.1

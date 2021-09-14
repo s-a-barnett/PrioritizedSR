@@ -1,11 +1,13 @@
 import numpy as np
 import numpy.random as npr
-import algs
 import progressbar
-import utils
-from gridworld import SimpleGrid
 import argparse
 import itertools
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from prioritizedsr import algs, utils
+from prioritizedsr.gridworld import SimpleGrid
 
 # fixed parameters
 gamma = 0.9

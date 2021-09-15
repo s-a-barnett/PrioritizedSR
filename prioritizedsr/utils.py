@@ -2,6 +2,7 @@ import numpy as np
 import numpy.random as npr
 import heapq
 from collections import defaultdict
+from itertools import product
 
 def onehot(value, max_value):
     vec = np.zeros(max_value)
@@ -27,6 +28,26 @@ def exp_normalize(x):
     b = x.max()
     y = np.exp(x - b)
     return y / y.sum()
+
+def compute_uniform_sr(env, gamma, goal_pos=None):
+    if goal_pos is None:
+        goal_pos = env.goal_pos
+
+    T = np.zeros((env.state_size, env.state_size))
+
+    for i, j, a in product(range(env.grid_size[0]), range(env.grid_size[1]), range(env.action_size)):
+        if [i, j] not in env.blocks:
+            env.reset(agent_pos=[i, j], goal_pos=goal_pos, reward_val=0)
+            state = env.observation
+            _ = env.step(a)
+            state_next = env.observation
+            T[state, state_next] += (1 / env.action_size)
+        else:
+            block_state = env.grid_to_state([i, j])
+            T[block_state, block_state] = 1
+    
+    M = np.linalg.pinv(np.eye(env.state_size) - gamma * T)
+    return M
 
 def run_episode(agent, env, epsilon=0.0, beta=1e6, poltype='softmax', episode_length=None, agent_pos=None, goal_pos=None, reward_val=None, update=True, sarsa=False, pretrain=False):
     if episode_length is None:

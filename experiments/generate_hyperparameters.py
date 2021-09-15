@@ -1,11 +1,14 @@
 import numpy as np
 import pandas as pd
+import os
 
-agents  = ['mparsr', 'qparsr']
-lrs     = [0.1, 0.3, 0.5, 0.7, 0.9]
-num_recalls = [100, 300, 1000, 3000, 10000]
+output_file = 'hyperparameters_four_rooms.csv'
+
+agents  = ['mparsr', 'qparsr', 'dynasr', 'mdq', 'tdsr']
+lrs     = [0.1]
+num_recalls = [10, 100, 1000, 10000]
 seeds = list(range(10))
 
 index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds], names=['agent', 'lr', 'num_recall', 'seed'])
 df = pd.DataFrame(index = index).reset_index()
-df.to_csv('hyperparameters.csv', index=False)
+df.to_csv(os.path.join('hyperparameters', output_file), index=False)

@@ -15,7 +15,7 @@ module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
 mkdir -p /tigress/samuelab/PrioritizedSR/logs/four_rooms/
 
-srun python train_from_hyperparameters.py four_rooms.py hyperparameters/hyperparameters_four_rooms.py $SLURM_ARRAY_TASK_ID /tigress/samuelab/PrioritizedSR/logs/four_rooms/results_four_rooms.csv
+srun python train_from_hyperparameters.py four_rooms.py hyperparameters/hyperparameters_four_rooms.csv $SLURM_ARRAY_TASK_ID /tigress/samuelab/PrioritizedSR/logs/four_rooms/results_four_rooms.csv
 
 # START=$(( $SLURM_ARRAY_TASK_ID * 7 ))
 # END=$(( $START + 6 ))

@@ -8,7 +8,8 @@ agents  = ['mparsr', 'qparsr', 'dynasr', 'mdq', 'tdsr']
 lrs     = [0.1]
 num_recalls = [10, 100, 1000, 10000]
 seeds = list(range(10))
+gss = [11]
 
-index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds], names=['agent', 'lr', 'num_recall', 'seed'])
+index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds, gss], names=['agent', 'lr', 'num_recall', 'seed', 'grid_size'])
 df = pd.DataFrame(index = index).reset_index()
 df.to_csv(os.path.join('hyperparameters', output_file), index=False)

@@ -2,7 +2,7 @@ import copy
 import argparse
 import numpy as np
 import numpy.random as npr
-import progressbar
+import tqdm
 import time
 import pickle
 import uuid
@@ -10,7 +10,7 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from prioritizedsr import algs, utils
-from prioritizedsr.gridworld import SimpleGrid
+from prioritizedsr.gridworld import SimpleGrid, StochasticSimpleGrid
 
 MAX_TRAINING_EPISODES = 10000
 
@@ -19,6 +19,8 @@ def agent_factory(args, state_size, action_size):
         agent = algs.TDSR(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'dynasr':
         agent = algs.DynaSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
+    elif args.agent == 'dynaq':
+        agent = algs.DynaQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
     elif args.agent == 'qparsr':
         agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True, online=True)
     elif args.agent == 'mparsr':
@@ -40,7 +42,10 @@ def main(args):
             f.write(','.join(args_keys + ['num_eps_to_optimality', 'wall_clock_time', 'exp_id']) + '\n')
 
     npr.seed(args.seed)
-    env = SimpleGrid(args.grid_size, block_pattern='four_rooms')
+    if args.stochastic:
+        env = StochasticSimpleGrid(args.grid_size, block_pattern='four_rooms')
+    else:
+        env = SimpleGrid(args.grid_size, block_pattern='four_rooms')
     agent = agent_factory(args, env.state_size, env.action_size)
     optimal_episode_length = 2 * (args.grid_size - 1)
 
@@ -48,15 +53,23 @@ def main(args):
 
     agent_pos = [0, 0]
     goal_pos = [args.grid_size -1, args.grid_size -1]
+    stoch_goal_pos = [args.grid_size - 1, 0]
 
     tic = time.time()
 
-    for i in progressbar.progressbar(range(MAX_TRAINING_EPISODES)):
-        # train for an episode
-        experiences, td_errors = utils.run_episode(agent, env, beta=args.beta, agent_pos=agent_pos, goal_pos=goal_pos)
-        
-        # every episode, test to see whether optimal policy is achieved
-        experiences, _ = utils.run_episode(agent, env, beta=1e6, agent_pos=agent_pos, goal_pos=goal_pos, update=False)
+    for i in tqdm.tqdm(range(MAX_TRAINING_EPISODES)):
+        if args.stochastic:
+            # train for an episode
+            experiences, td_errors = utils.run_episode(agent, env, beta=args.beta, agent_pos=agent_pos, goal_pos=goal_pos, stoch_goal_pos=stoch_goal_pos)
+
+            # every episode, test to see whether optimal policy is achieved
+            experiences, _ = utils.run_episode(agent, env, beta=1e6, agent_pos=agent_pos, goal_pos=goal_pos, update=False, stoch_goal_pos=stoch_goal_pos)
+        else:
+                # train for an episode
+            experiences, td_errors = utils.run_episode(agent, env, beta=args.beta, agent_pos=agent_pos, goal_pos=goal_pos)
+
+            # every episode, test to see whether optimal policy is achieved
+            experiences, _ = utils.run_episode(agent, env, beta=1e6, agent_pos=agent_pos, goal_pos=goal_pos, update=False)
         iterations.append(i)
         if len(experiences) == optimal_episode_length:
             break
@@ -87,7 +100,7 @@ def main(args):
     args_vals = [str(val) for val in args_dict.values()]
     with open(args.output, 'a') as f:
         f.write(','.join(args_vals + [str(num_eps_to_optimality), str(wall_clock_time), exp_id]) + '\n')
-    
+
     return 0
 
 if __name__ == '__main__':
@@ -99,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('--grid_size', type=int, default=7, help='size of grid')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate for agent')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for agent')
+    parser.add_argument('--stochastic', type=bool, default=False, help='stochastic environment')
     parser.add_argument('--output', type=str, help='path to results file')
     args = parser.parse_args()
     main(args)

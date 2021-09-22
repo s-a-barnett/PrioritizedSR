@@ -19,6 +19,6 @@ START=$(( $SLURM_ARRAY_TASK_ID * 10 ))
 END=$(( $START + 9 ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py policy_reval.py hyperparameters/hyperparameters_rm.csv $SLURM_ARRAY_TASK_ID /tigress/samuelab/PrioritizedSR/logs/policy_reval/results_policy_reval.csv
+    srun python train_from_hyperparameters.py policy_reval.py hyperparameters/hyperparameters_rm.csv $i /tigress/samuelab/PrioritizedSR/logs/policy_reval/results_policy_reval.csv
 done
 

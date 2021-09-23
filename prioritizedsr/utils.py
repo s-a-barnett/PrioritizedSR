@@ -45,11 +45,11 @@ def compute_uniform_sr(env, gamma, goal_pos=None):
         else:
             block_state = env.grid_to_state([i, j])
             T[block_state, block_state] = 1
-    
+
     M = np.linalg.pinv(np.eye(env.state_size) - gamma * T)
     return M
 
-def run_episode(agent, env, epsilon=0.0, beta=1e6, poltype='softmax', episode_length=None, agent_pos=None, goal_pos=None, reward_val=None, update=True, sarsa=False, pretrain=False):
+def run_episode(agent, env, epsilon=0.0, beta=1e6, poltype='softmax', episode_length=None, agent_pos=None, goal_pos=None, stoch_goal_pos=None, reward_val=None, update=True, sarsa=False, pretrain=False):
     if episode_length is None:
         episode_length = 10 * int(np.sqrt(env.state_size))
     env.reset(agent_pos=agent_pos, goal_pos=goal_pos, reward_val=reward_val)

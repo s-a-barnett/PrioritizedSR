@@ -3,7 +3,7 @@ from . import utils
 from itertools import product
 
 class SimpleGrid:
-    def __init__(self, size, block_pattern='empty', 
+    def __init__(self, size, block_pattern='empty',
                  verbose=False, obs_mode='index'):
         self.verbose = verbose
         if np.isscalar(size):
@@ -19,7 +19,7 @@ class SimpleGrid:
         self.done = None
         self.observations = None
         self.num_steps = 0
-            
+
     def reset(self, goal_pos=None, agent_pos=None, reward_val=None):
         self.done = False
         if reward_val != None:
@@ -39,7 +39,7 @@ class SimpleGrid:
             self.agent_pos = agent_pos
         else:
             self.agent_pos = self.get_free_spot()
-        
+
     def get_free_spot(self):
         free = False
         possible_x = np.arange(0, self.grid_size[0])
@@ -50,7 +50,7 @@ class SimpleGrid:
             try_position = [try_x, try_y]
             if try_position not in self.all_positions:
                 return try_position
-        
+
     def make_blocks(self, pattern):
         if (pattern == 'four_rooms') or (pattern == 'four_rooms_blocked'):
             mid = int(self.grid_size[0] // 2)
@@ -143,7 +143,7 @@ class SimpleGrid:
                 return blocks
             else:
                 raise ValueError('unknown pattern')
-        
+
     @property
     def grid(self):
         grid = np.zeros([self.grid_size[0], self.grid_size[1], 3])
@@ -153,20 +153,20 @@ class SimpleGrid:
         for block in self.blocks:
             grid[block[0], block[1], 2] = 1
         return grid
-    
+
     def move_agent(self, direction):
         if (self.agent_pos not in self.goal_pos) or (self.reward_val == 0):
             new_pos = self.agent_pos + direction
             if self.check_target(new_pos):
                 self.agent_pos = list(new_pos)
-            
+
     def simulate(self, action):
         agent_old_pos = self.agent_pos
         reward = self.step(action)
         state = self.state
         self.agent_pos = agent_old_pos
         return state
-        
+
     def check_target(self, target):
         x_check = target[0] > -1 and target[0] < self.grid_size[0]
         y_check = target[1] > -1 and target[1] < self.grid_size[1]
@@ -175,7 +175,7 @@ class SimpleGrid:
             return True
         else:
             return False
-        
+
     @property
     def observation(self):
         if self.obs_mode == 'onehot':
@@ -194,27 +194,27 @@ class SimpleGrid:
             return env.grid
         if self.obs_mode == 'index':
             goal_list = [goal_pos[0] * self.grid_size[1] + goal_pos[1] for goal_pos in self.goal_pos]
-        
+
     @property
     def all_positions(self):
         all_positions = self.blocks + self.goal_pos + [self.agent_pos]
         return all_positions
-    
+
     def state_to_grid(self, state):
         vec_state = np.zeros([self.state_size])
         vec_state[state] = 1
         vec_state = np.reshape(vec_state, [self.grid_size[0], self.grid_size[1]])
         return vec_state
-    
+
     def state_to_goal(self, state):
         return utils.onehot(state, self.state_size)
-    
+
     def state_to_point(self, state):
         a = self.state_to_grid(state)
         b = np.where(a==1)
         c = [b[0][0],b[1][0]]
         return c
-    
+
     def state_to_obs(self, state):
         if self.obs_mode == 'onehot':
             point = self.state_to_point(state)
@@ -227,7 +227,7 @@ class SimpleGrid:
     def grid_to_state(self, coords):
         state = coords[0] * self.grid_size[1] + coords[1]
         return state
-        
+
     def step(self, action):
         # 0 - Up
         # 1 - Down
@@ -254,3 +254,116 @@ class SimpleGrid:
     def state_to_goal(self, state):
         return self.state_to_obs(state)
 
+
+
+class StochasticSimpleGrid(SimpleGrid):
+    def __init__(self, size, block_pattern='empty',
+                 verbose=False, obs_mode='index'):
+        self.verbose = verbose
+        if np.isscalar(size):
+            self.grid_size = (size, size)
+        else:
+            self.grid_size = size
+        self.action_size = 4
+        self.obs_mode = obs_mode
+        self.state_size = self.grid_size[0] * self.grid_size[1]
+        self.blocks = self.make_blocks(block_pattern)
+        self.deter_goal_pos = [[]]
+        self.stoch_goal_pos = [[]]
+        self.agent_pos = []
+        self.done = None
+        self.observations = None
+        self.num_steps = 0
+
+    def reset(self, goal_pos=None, stoch_goal_pos=None, agent_pos=None, reward_val=None, stoch_reward_val=None):
+        self.done = False
+
+        if reward_val != None:
+            self.deter_reward_val = reward_val
+        else:
+            self.deter_reward_val = 1
+
+        if stoch_reward_val != None:
+            self.stoch_reward_val = stoch_reward_val
+        else:
+            self.stoch_reward_val = lambda : 0.5 # np.random.normal(0, 5)
+
+        if goal_pos != None:
+            # turn deter_goal_pos into list of deter_goal_pos if just one given
+            if type(goal_pos[0]) == int:
+                deter_goal_pos = [goal_pos]
+            self.deter_goal_pos = deter_goal_pos
+        else:
+            self.deter_goal_pos = [self.get_free_spot()]
+
+        if stoch_goal_pos != None:
+            # turn stoch_goal_pos into list of stoch_goal_pos if just one given
+            if type(stoch_goal_pos[0]) == int:
+                stoch_goal_pos = [stoch_goal_pos]
+            self.stoch_goal_pos = stoch_goal_pos
+        else:
+            self.stoch_goal_pos = [self.get_free_spot()]
+
+        if agent_pos != None:
+            assert type(agent_pos[0]) == int
+            assert len(agent_pos) == 2
+            self.agent_pos = agent_pos
+        else:
+            self.agent_pos = self.get_free_spot()
+
+    @property
+    def grid(self):
+        grid = np.zeros([self.grid_size[0], self.grid_size[1], 3])
+        grid[self.agent_pos[0], self.agent_pos[1], 0] = 1
+        for goal_pos in self.stoch_goal_pos:
+            grid[goal_pos[0], goal_pos[1], 1] = 1
+        for goal_pos in self.deter_goal_pos:
+            grid[goal_pos[0], goal_pos[1], 1] = 1
+        for block in self.blocks:
+            grid[block[0], block[1], 2] = 1
+        return grid
+
+    def move_agent(self, direction):
+        if (self.agent_pos not in self.deter_goal_pos) \
+        or (self.agent_pos not in self.stoch_goal_pos) \
+        or (self.reward_val == 0):
+
+            new_pos = self.agent_pos + direction
+            if self.check_target(new_pos):
+                self.agent_pos = list(new_pos)
+
+    @property
+    def all_positions(self):
+        all_positions = self.blocks + self.stoch_goal_pos + self.deter_goal_pos + [self.agent_pos]
+        return all_positions
+
+    def step(self, action):
+        # 0 - Up
+        # 1 - Down
+        # 2 - Left
+        # 3 - Right
+        move_array = np.array([0,0])
+        if action == 2:
+            move_array = np.array([0,-1])
+        if action == 3:
+            move_array = np.array([0,1])
+        if action == 0:
+            move_array = np.array([-1,0])
+        if action == 1:
+            move_array = np.array([1,0])
+        self.move_agent(move_array)
+        self.num_steps += 1
+        if (self.agent_pos in self.deter_goal_pos) and (self.deter_reward_val != 0):
+            # treat an env with reward 0 as if it has no goal
+            self.done = True
+            return self.deter_reward_val
+        elif (self.agent_pos in self.stoch_goal_pos):
+            # treat an env with reward 0 as if it has no goal
+            reward = self.stoch_reward_val()
+            if reward != 0:
+                self.done = True
+                return reward
+            else:
+                return 0.0
+        else:
+            return 0.0

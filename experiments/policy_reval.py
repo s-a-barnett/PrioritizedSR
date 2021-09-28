@@ -171,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
     parser.add_argument('--beta', type=float, default=5, help='softmax inverse temp')
-    parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for agent')
+    parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
     parser.add_argument('--output', type=str, help='path to results file')
     args = parser.parse_args()
     main(args)

@@ -4,12 +4,12 @@ import os
 
 output_file = 'hyperparameters_rm.csv'
 
-agents  = ['mparsr', 'qparsr', 'dynasr', 'mdq', 'tdsr']
-lrs     = [0.1]
+agents  = ['mparsr', 'qparsr', 'dynasr', 'tdsr']
+lrs     = [0.3]
 num_recalls = [1000, 3000, 10000, 30000, 100000]
 seeds = list(range(10))
 ress = [1, 2, 3, 4]
-betas = [0, 5]
+betas = [5]
 
 index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds, ress, betas], names=['agent', 'lr', 'num_recall', 'seed', 'res', 'beta'])
 df = pd.DataFrame(index = index).reset_index()

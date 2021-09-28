@@ -15,8 +15,8 @@ module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
 mkdir -p /tigress/samuelab/PrioritizedSR/logs/policy_reval/
 
-START=$(( $SLURM_ARRAY_TASK_ID * 10 ))
-END=$(( $START + 9 ))
+START=$(( $SLURM_ARRAY_TASK_ID * 4 ))
+END=$(( $START + 3 ))
 for i in $(seq $START $END)
 do
     srun python train_from_hyperparameters.py policy_reval.py hyperparameters/hyperparameters_rm.csv $i /tigress/samuelab/PrioritizedSR/logs/policy_reval/results_policy_reval.csv

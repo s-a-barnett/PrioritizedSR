@@ -344,11 +344,12 @@ class MDQ(TDQ):
 
 class TDSR:
 
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax'):
+    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax', weights='direct'):
         self.state_size = state_size
         self.action_size = action_size
 
         self.poltype = poltype
+        self.weights = weights
 
         if M_init is None:
             self.M = np.stack([np.identity(state_size) for i in range(action_size)])
@@ -379,11 +380,19 @@ class TDSR:
         return action
 
     def update_w(self, current_exp):
-        s_1 = current_exp[2]
-        r = current_exp[3]
-        error = r - self.w[s_1]
-        self.w[s_1] += self.learning_rate * error
-        return error
+        s, a, s_1, r, _ = current_exp
+        if self.weights == 'direct':
+            error = r - self.w[s_1]
+            self.w[s_1] += self.learning_rate * error
+        elif self.weights == 'td':
+            Vs = self.Q_estimates(s).max()
+            Vs_1 = self.Q_estimates(s_1).max()
+            delta = r + self.gamma * Vs_1 - Vs
+            # epsilon and beta are hard-coded, need to improve this
+            M = self.get_M_states(epsilon=1e-1, beta=5)
+            error = delta * M[s]
+            self.w += self.learning_rate * error
+        return np.linalg.norm(error)
 
     def update_sr(self, current_exp, next_exp=None, prospective=False):
         s = current_exp[0]
@@ -446,10 +455,11 @@ class TDSR:
 
 class DynaSR(TDSR):
     
-    def __init__(self, state_size, action_size, num_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall, recency='exponential', **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.model = {}
+        self.recency = recency
 
     def _sample_model(self):
         # sample state
@@ -458,8 +468,15 @@ class DynaSR(TDSR):
         # sample action previously taken from sampled state
         past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
         sampled_action = past_actions[npr.choice(len(past_actions))]
+        key = (sampled_state, sampled_action)
         # get reward, state_next, done, and make exp
-        exp = (sampled_state, sampled_action) + self.model[(sampled_state, sampled_action)][1]
+        if self.recency == 'exponential':
+            successors = self.model[key][1]
+            idx = np.minimum(len(successors)-1, int(npr.exponential(scale=5)))
+            successor = successors[::-1][idx]
+        else:
+            successor = self.model[key][1]
+        exp = (sampled_state, sampled_action) + successor 
         
         return exp
 
@@ -470,7 +487,19 @@ class DynaSR(TDSR):
         state, action, next_state, reward, done = current_exp
 
         # update (deterministic) model
-        self.model[(state, action)] = self.num_updates, (next_state, reward, done)
+        key = (state, action)
+        value = (next_state, reward, done)
+        if self.recency == 'exponential':
+            if key in self.model:
+                successors = self.model[key][1]
+                successors.append(value)
+                # shorten successors to capture >99% of probability mass
+                successors = successors[-25:]
+                self.model[key] = self.num_updates, successors
+            else:
+                self.model[key] = self.num_updates, [value]
+        else:
+            self.model[key] = self.num_updates, value
 
         for i in range(self.num_recall):
             exp = self._sample_model()
@@ -494,15 +523,25 @@ class DynaSRPlus(DynaSR):
         possible_actions = np.arange(self.action_size)
         past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
         sampled_action = possible_actions[npr.choice(len(possible_actions))]
+        key = (sampled_state, sampled_action)
         if sampled_action not in past_actions:
             # initial model that action leads to same state with reward zero
             reward = 0
             next_state = sampled_state
             done = False
             # add state-action to model
-            self.model[(sampled_state, sampled_action)] = 1, (next_state, reward, done)
+            value = (next_state, reward, done)
+            if self.recency == 'exponential':
+                value = [value]
+            self.model[(sampled_state, sampled_action)] = 1, value
 
-        t_last_update, (next_state, reward, done) = self.model[(sampled_state, sampled_action)]
+        if self.recency == 'exponential':
+            t_last_update, successors = self.model[key]
+            idx = np.minimum(len(successors)-1, int(npr.exponential(scale=5)))
+            successor = successors[::-1][idx]
+            (next_state, reward, done) = successor
+        else:
+            t_last_update, (next_state, reward, done) = self.model[key]
 
         # bonus reward for actions not tried in a while
         reward += self.kappa * np.sqrt(self.num_updates - t_last_update)
@@ -570,6 +609,7 @@ class PARSR(TDSR):
                 # add predecessors to priority queue
                 exp_pred = (s, a) + self.model[(s, a)]
                 m_error = self.update_sr(exp_pred, prospective=(not self.online))
+                w_error = self.update_w(current_exp)
                 priority = self.priority(m_error, exp_pred)
                 if priority >= self.theta:
                     self.pqueue.push((s, a), -priority)
@@ -605,8 +645,9 @@ class PEPARSR(TDSR):
         pri_vals += 1e-10
         weights = np.power(N * pri_vals, -self.bias)
         weights /= weights.max()
-        p = pri_vals ** self.pri_strength
-        p /= p.sum()
+        p = softmax(self.pri_strength * pri_vals)
+        # p = pri_vals ** self.pri_strength
+        # p /= p.sum()
         sampled_idxs = npr.choice(len(sa_pairs_all), p=p, replace=True, size=self.num_recall)
         sa_pairs = [sa_pairs_all[i] for i in sampled_idxs]
         exps = [sa + self.model[sa] for sa in sa_pairs]

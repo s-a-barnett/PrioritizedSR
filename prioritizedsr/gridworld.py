@@ -1,6 +1,68 @@
 import numpy as np
+import numpy.random as npr
 from . import utils
 from itertools import product
+
+class Sequential:
+    def __init__(self, transition_pattern=None):
+        self.transition_pattern = transition_pattern
+        self.action_size = 2
+        self.state_size = 6
+        self.done = None
+        self.num_steps = 0
+        self.agent_pos = None
+        self.reward_val = None
+        self.transitions = self.make_transitions(transition_pattern)
+        self.goal_pos = None
+
+    def make_transitions(self, transition_pattern):
+        transitions = np.zeros((self.state_size, self.action_size), dtype=np.int)
+        transitions[0, 0] = 1
+        transitions[0, 1] = 2
+        if transition_pattern is None:
+            transitions[1, 0] = 3
+            transitions[1, 1] = 4
+            transitions[2, 0] = 4
+            transitions[2, 1] = 5
+        else:
+            assert transition_pattern == 'reval'
+            transitions[1, 0] = 4
+            transitions[1, 1] = 5
+            transitions[2, 0] = 3
+            transitions[2, 1] = 4
+        for state in range(3, 6):
+            for action in range(2):
+                transitions[state, action] = state
+        return transitions        
+
+    def reset(self, agent_pos=None, goal_pos=None, reward_val=None):
+        self.done = False
+        if reward_val is None:
+            self.reward_val = [15.0, 0.0, 30.0]
+        else:
+            assert len(reward_val) == 3
+            self.reward_val = reward_val
+        if agent_pos is None:
+            self.agent_pos = npr.choice(3)
+        else:
+            assert type(agent_pos) == np.int
+            assert agent_pos < self.state_size
+            self.agent_pos = agent_pos
+
+    @property
+    def observation(self):
+        return self.agent_pos
+
+    def step(self, action):
+        # 0 - Left
+        # 1 - Right
+        self.agent_pos = self.transitions[self.agent_pos, action]
+        self.num_steps += 1
+        if self.agent_pos > 2:
+            self.done = True
+            return self.reward_val[self.agent_pos - 3]
+        else:
+            return 0.0
 
 class SimpleGrid:
     def __init__(self, size, block_pattern='empty',
@@ -17,7 +79,6 @@ class SimpleGrid:
         self.goal_pos = [[]]
         self.agent_pos = []
         self.done = None
-        self.observations = None
         self.num_steps = 0
 
     def reset(self, goal_pos=None, agent_pos=None, reward_val=None):
@@ -272,7 +333,6 @@ class StochasticSimpleGrid(SimpleGrid):
         self.stoch_goal_pos = [[]]
         self.agent_pos = []
         self.done = None
-        self.observations = None
         self.num_steps = 0
 
     def reset(self, goal_pos=None, stoch_goal_pos=None, agent_pos=None, reward_val=None, stoch_reward_val=None):

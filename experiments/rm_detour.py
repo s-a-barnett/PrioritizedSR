@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.random as npr
-import progressbar
+import tqdm
 import argparse
 import itertools
 import uuid
@@ -15,24 +15,8 @@ NUM_INTRO = 100
 NUM_TRAINING_EPISODES = 100
 EPISODE_LENGTH = 25000
 
-def agent_factory(args, state_size, action_size):
-    if args.agent == 'tdsr':
-        agent = algs.TDSR(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'dynasr':
-        agent = algs.DynaSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'qparsr':
-        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True, online=True)
-    elif args.agent == 'mparsr':
-        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=False, online=True)
-    elif args.agent == 'mdq':
-        agent = algs.MDQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, online=True)
-    else:
-        raise ValueError('Invalid agent type: %s' % args.agent)
-
-    return agent
-
 def test_from_Q(Q, env, ap, gp, rw, args):
-    agent_test = algs.TDQ(env.state_size, env.action_size, learning_rate=args.lr, gamma=args.gamma, Q_init=Q)
+    agent_test = algs.TDQ(env.state_size, env.action_size, Q_init=Q)
     experiences, _ = utils.run_episode(agent_test, env, agent_pos=ap, goal_pos=gp, reward_val=rw, update=False)
     return len(experiences)
 
@@ -57,8 +41,8 @@ def main(args):
     Qs_before = np.zeros((NUM_RUNS, env.action_size, env.state_size))
     Qs_after = np.zeros_like(Qs_before)
 
-    for i in progressbar.progressbar(range(NUM_RUNS)):
-        agent = agent_factory(args, env.state_size, env.action_size)
+    for i in tqdm.tqdm(range(NUM_RUNS)):
+        agent = utils.agent_factory(args, env.state_size, env.action_size)
 
         # train on original task
         for j in range(NUM_TRAINING_EPISODES):
@@ -121,6 +105,7 @@ if __name__ == '__main__':
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
     parser.add_argument('--beta', type=float, default=5, help='softmax inverse temp')
+    parser.add_argument('--theta', type=float, default=1e-6, help='ps theta')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor for agent')
     parser.add_argument('--output', type=str, help='path to results file')
     args = parser.parse_args()

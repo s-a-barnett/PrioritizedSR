@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=policy_reval
+#SBATCH --job-name=sequential
 #SBATCH --output=outputs/slurm-%A.%a.out
 #SBATCH --error=outputs/slurm-%A.%a.err
 #SBATCH --nodes=1
@@ -13,12 +13,12 @@
 
 module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
-mkdir -p /tigress/samuelab/PrioritizedSR/logs/policy_reval/
+mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/
 
-START=$(( $SLURM_ARRAY_TASK_ID * 5 ))
-END=$(( $START + 4 ))
+START=$(( $SLURM_ARRAY_TASK_ID * 14 ))
+END=$(( $START + 13 ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py policy_reval.py hyperparameters/hyperparameters_rm.csv $i /tigress/samuelab/PrioritizedSR/logs/policy_reval/results_policy_reval.csv
+    srun python train_from_hyperparameters.py sequential.py hyperparameters/hyperparameters_sequential.csv $i /tigress/samuelab/PrioritizedSR/logs/sequential/results_sequential.csv
 done
 

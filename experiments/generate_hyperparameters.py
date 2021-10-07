@@ -2,15 +2,17 @@ import numpy as np
 import pandas as pd
 import os
 
-output_file = 'hyperparameters_rm.csv'
+output_file = 'hyperparameters_sequential.csv'
+real_path = os.path.realpath(__file__)
+dir_path = os.path.dirname(real_path)
 
-agents  = ['mparsr', 'qparsr', 'dynasr', 'tdsr']
+agents  = ['mparsr', 'qparsr', 'dynasr', 'tdsr', 'psq', 'dynaq', 'tdq']
 lrs     = [0.3]
-num_recalls = [1000, 3000, 10000, 30000, 100000]
+num_recalls = [1, 3, 10, 30, 100]
 seeds = list(range(10))
-ress = [1, 2, 3, 4]
-betas = [5]
+betas = [0, 5]
+conditions = ['control', 'reward', 'transition', 'policy']
 
-index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds, ress, betas], names=['agent', 'lr', 'num_recall', 'seed', 'res', 'beta'])
+index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds, conditions, betas], names=['agent', 'lr', 'num_recall', 'seed', 'condition', 'beta'])
 df = pd.DataFrame(index = index).reset_index()
-df.to_csv(os.path.join('hyperparameters', output_file), index=False)
+df.to_csv(os.path.join(dir_path, 'hyperparameters', output_file), index=False)

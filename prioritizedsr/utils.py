@@ -3,6 +3,37 @@ import numpy.random as npr
 import heapq
 from collections import defaultdict
 from itertools import product
+from . import algs
+
+def agent_factory(args, state_size, action_size):
+    if args.agent == 'tdq':
+        agent = algs.TDQ(state_size, action_size, **vars(args))
+    elif args.agent == 'dynaq':
+        agent = algs.DynaQ(state_size, action_size, **vars(args))
+    elif args.agent == 'dynaqplus':
+        agent = algs.DynaQPlus(state_size, action_size, **vars(args))
+    elif args.agent == 'psq':
+        agent = algs.PSQ(state_size, action_size, **vars(args))
+    elif args.agent == 'mdq':
+        agent = algs.MDQ(state_size, action_size, online=True, **vars(args))
+    elif args.agent == 'tdsr':
+        agent = algs.TDSR(state_size, action_size, **vars(args))
+    elif args.agent == 'dynasr':
+        agent = algs.DynaSR(state_size, action_size, **vars(args))
+    elif args.agent == 'dynasrplus':
+        agent = algs.DynaSRPlus(state_size, action_size, **vars(args))
+    elif args.agent == 'qparsr':
+        agent = algs.PARSR(state_size, action_size, goal_pri=True, online=True, **vars(args))
+    elif args.agent == 'mparsr':
+        agent = algs.PARSR(state_size, action_size, goal_pri=False, online=True, **vars(args))
+    elif args.agent == 'qpeparsr':
+        agent = algs.PEPARSR(state_size, action_size, goal_pri=True, online=True, **vars(args))
+    elif args.agent == 'mpeparsr':
+        agent = algs.PEPARSR(state_size, action_size, goal_pri=False, online=True, **vars(args))
+    else:
+        raise ValueError('Invalid agent type: %s' % args.agent)
+
+    return agent
 
 def onehot(value, max_value):
     vec = np.zeros(max_value)

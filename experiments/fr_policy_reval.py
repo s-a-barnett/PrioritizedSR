@@ -12,6 +12,7 @@ from prioritizedsr.gridworld import SimpleGrid
 
 NUM_RUNS = 10
 EPISODE_LENGTH = 25000
+NUM_BLOCKSTEPS = 40
 
 def test_from_Q(Q, env, ap, gp, rw, args):
     agent_test = algs.TDQ(env.state_size, env.action_size, Q_init=Q)
@@ -28,19 +29,13 @@ def main(args):
             f.write(','.join(args_keys + ['learns_latent', 'learns_reval', 'learns_both', 'exp_id']) + '\n')
 
     npr.seed(args.seed)
-    r = args.res
     # agent has chance to be introduced to every square in goal_pos
-    NUM_INTRO = np.maximum(20, r ** 2)
-    grid_size = (10*r, 10*r)
-    agent_pos = [[7*r, 0], [8*r, 8*r]]
+    agent_pos = [0, 0]
     goal_pos = [[], []]
-    for x, y in itertools.product(range(r), range(r)):
-        goal_pos[0] += [[r + x, 9*r + y]]
-        goal_pos[1] += [[8*r + x, 9*r + y]]
     reward_val = [10, 20]
     optimal_episode_lengths = {'S1R1': 16*r + 3, 'S1R2': 18*r + 2, 'S2R2': r}
 
-    env = SimpleGrid(grid_size, block_pattern='tolman')
+    env = SimpleGrid(args.grid_size, block_pattern='four_rooms')
     Qs_latent = np.zeros((NUM_RUNS, env.action_size, env.state_size))
     Qs_reval = np.zeros_like(Qs_latent)
 
@@ -150,7 +145,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='random seed')
-    parser.add_argument('--res', type=int, default=1, help='resolution of gridworld')
+    parser.add_argument('--grid_size', type=int, default=7, help='size of grid')
     parser.add_argument('--num_recall', type=int, default=10000, help='number of recalls')
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')

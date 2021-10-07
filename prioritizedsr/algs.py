@@ -2,11 +2,11 @@ import numpy as np
 import numpy.random as npr
 from scipy.special import softmax
 from collections import defaultdict
-from . import utils
 import random
+from . import utils
 
 class TDQ:
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, poltype='softmax', Q_init=None):
+    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, poltype='softmax', Q_init=None, **kwargs):
         self.state_size = state_size
         self.action_size = action_size
 
@@ -72,7 +72,7 @@ class TDQ:
 
 class DynaQ(TDQ):
 
-    def __init__(self, state_size, action_size, num_recall, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.model = {}
@@ -107,8 +107,8 @@ class DynaQ(TDQ):
 
 class DynaQPlus(DynaQ):
     
-    def __init__(self, state_size, action_size, num_recall, kappa=1e-4, **kwargs):
-        super().__init__(state_size, action_size, num_recall, **kwargs)
+    def __init__(self, state_size, action_size, num_recall=10, kappa=1e-4, **kwargs):
+        super().__init__(state_size, action_size, num_recall=num_recall, **kwargs)
         self.kappa = kappa
 
     def _sample_model(self):
@@ -138,7 +138,7 @@ class DynaQPlus(DynaQ):
 
 class PSQ(TDQ):
 
-    def __init__(self, state_size, action_size, num_recall, theta=1e-6, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, theta=1e-6, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.theta = theta
@@ -192,7 +192,7 @@ class PSQ(TDQ):
         return td_error
 
 class MDQ(TDQ):
-    def __init__(self, state_size, action_size, num_recall, online=False, set_need_to_one=False, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, online=False, set_need_to_one=False, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.online = online
@@ -344,7 +344,7 @@ class MDQ(TDQ):
 
 class TDSR:
 
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax', weights='direct'):
+    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax', weights='direct', **kwargs):
         self.state_size = state_size
         self.action_size = action_size
 
@@ -455,7 +455,7 @@ class TDSR:
 
 class DynaSR(TDSR):
     
-    def __init__(self, state_size, action_size, num_recall, recency='exponential', **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, recency='exponential', **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.model = {}
@@ -476,7 +476,7 @@ class DynaSR(TDSR):
             successor = successors[::-1][idx]
         else:
             successor = self.model[key][1]
-        exp = (sampled_state, sampled_action) + successor 
+        exp = key + successor 
         
         return exp
 
@@ -510,8 +510,8 @@ class DynaSR(TDSR):
 
 class DynaSRPlus(DynaSR):
     
-    def __init__(self, state_size, action_size, num_recall, kappa=1e-4, **kwargs):
-        super().__init__(state_size, action_size, num_recall, **kwargs)
+    def __init__(self, state_size, action_size, num_recall=10, kappa=1e-4, **kwargs):
+        super().__init__(state_size, action_size, num_recall=num_recall, **kwargs)
         self.kappa = kappa
 
     def _sample_model(self):
@@ -551,7 +551,7 @@ class DynaSRPlus(DynaSR):
 
 class PARSR(TDSR):
 
-    def __init__(self, state_size, action_size, num_recall, theta=1e-6, goal_pri=True, online=False, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, theta=1e-6, goal_pri=True, online=False, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.theta = theta
@@ -572,6 +572,20 @@ class PARSR(TDSR):
             # priority given by temporal difference of successor representation
             error = m_error
         return np.linalg.norm(error)
+
+    def _sample_model(self):
+        # sample state
+        past_states = [k[0] for k in self.model.keys()]
+        sampled_state = past_states[npr.choice(len(past_states))]
+        # sample action previously taken from sampled state
+        past_actions = [k[1] for k in self.model.keys() if k[0] == sampled_state]
+        sampled_action = past_actions[npr.choice(len(past_actions))]
+        key = (sampled_state, sampled_action)
+        # get reward, state_next, done, and make exp
+        successor = self.model[key]
+        exp = key + successor 
+        
+        return exp
     
     def update(self, current_exp, **kwargs):
         state, action, next_state, reward, done = current_exp
@@ -593,12 +607,12 @@ class PARSR(TDSR):
 
         for k in range(self.num_recall):
             if self.pqueue.is_empty():
-                break
-
-            # get highest priority experience
-            state, action = self.pqueue.pop()
-            self.prioritized_states[state] += 1
-            exp = (state, action) + self.model[(state, action)]
+                exp = self._sample_model()
+            else:
+                # get highest priority experience
+                state, action = self.pqueue.pop()
+                exp = (state, action) + self.model[(state, action)]
+            self.prioritized_states[exp[0]] += 1
             self.recalled.append([exp])
 
             # update M and w based on this experience
@@ -619,7 +633,7 @@ class PARSR(TDSR):
 
 class PEPARSR(TDSR):
     
-    def __init__(self, state_size, action_size, num_recall, pri_strength=0.7, bias=0.4, goal_pri=True, online=False, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, pri_strength=5, bias=0, goal_pri=True, online=False, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.pri_strength = pri_strength
@@ -685,78 +699,79 @@ class PEPARSR(TDSR):
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error
 
-class MDSR(TDSR):
-
-    def __init__(self, state_size, action_size, num_recall, online=False, **kwargs):
-        super().__init__(state_size, action_size, **kwargs)
-        self.num_recall = num_recall
-        self.experiences = []
-        self.online = online
-
-    def evb(self, state, exp, epsilon=0.0, beta=5.0):
-        s = exp[0]
-        s_a = exp[1]
-        s_1 = exp[2]
-        r = exp[3]
-
-        # compute new M and w based on experience to be evaluated
-        M_new = self.M.copy()
-        M_new[s_a, s, :] += self.learning_rate * self.update_sr(exp, prospective=True)
-        w_new = self.w.copy()
-        w_error = r - w_new[s_1]
-        w_new[s_1] += self.learning_rate * w_error
-
-        # get old policy as a baseline
-        pi_old = self.get_policy(epsilon=epsilon, beta=beta)
-
-        # compute gain term
-        if w_error != 0:
-            Q_new = M_new @ w_new
-            pi_new = self.get_policy(M=M_new, goal=w_new, epsilon=epsilon, beta=beta)
-            gain = (Q_new.T @ (pi_new - pi_old))[s, s]
-        else:
-            # if no change in w, this is a shortcut for computing gain
-            q_new = M_new[:, s, :] @ self.w
-            if self.poltype == 'softmax':
-                pi_s_new = softmax(beta * q_new)
-            else:
-                mask = (q_new == q_new.max())
-                greedy = mask / mask.sum()
-                pi_s_new = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones(self.action_size)
-            gain = q_new @ (pi_s_new - pi_old[:, s])
-            pi_new = pi_old.copy()
-            pi_new[:, s] = pi_s_new
-
-        # compute need according to updated successor representation
-        need = pi_new[:, state].T @ M_new[:, state, s]
-
-        # return product of gain and need terms
-        return gain * need
-
-    def update(self, current_exp, **kwargs):
-        self.experiences.append(current_exp)
-
-        # perform online update of M and w
-        m_error = self.update_sr(current_exp, prospective=(not self.online), **kwargs)
-        w_error = self.update_w(current_exp) if self.online else 0.0
-
-        # list of possible experiences to update on
-        unique_exps = list(set(self.experiences))
-
-        self.recalled = []
-
-        for k in range(self.num_recall):
-            # compute expected value of backup for every possible experience
-            evbs = [{"exp": exp, "evb": self.evb(current_exp[0], exp)} for exp in unique_exps]
-
-            # get experience with the best evb
-            best = sorted(evbs, key=lambda x: x["evb"]).pop()
-            best_exp = best["exp"]
-            self.prioritized_states[best_exp[0]] += 1
-            self.recalled.append([best_exp])
-
-            # update successor representation with this experience
-            m_error = self.update_sr(best_exp)
-
-        td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
-        return td_error
+# DEPRECATED ALGORITHM
+# class MDSR(TDSR):
+# 
+#     def __init__(self, state_size, action_size, num_recall, online=False, **kwargs):
+#         super().__init__(state_size, action_size, **kwargs)
+#         self.num_recall = num_recall
+#         self.experiences = []
+#         self.online = online
+# 
+#     def evb(self, state, exp, epsilon=0.0, beta=5.0):
+#         s = exp[0]
+#         s_a = exp[1]
+#         s_1 = exp[2]
+#         r = exp[3]
+# 
+#         # compute new M and w based on experience to be evaluated
+#         M_new = self.M.copy()
+#         M_new[s_a, s, :] += self.learning_rate * self.update_sr(exp, prospective=True)
+#         w_new = self.w.copy()
+#         w_error = r - w_new[s_1]
+#         w_new[s_1] += self.learning_rate * w_error
+# 
+#         # get old policy as a baseline
+#         pi_old = self.get_policy(epsilon=epsilon, beta=beta)
+# 
+#         # compute gain term
+#         if w_error != 0:
+#             Q_new = M_new @ w_new
+#             pi_new = self.get_policy(M=M_new, goal=w_new, epsilon=epsilon, beta=beta)
+#             gain = (Q_new.T @ (pi_new - pi_old))[s, s]
+#         else:
+#             # if no change in w, this is a shortcut for computing gain
+#             q_new = M_new[:, s, :] @ self.w
+#             if self.poltype == 'softmax':
+#                 pi_s_new = softmax(beta * q_new)
+#             else:
+#                 mask = (q_new == q_new.max())
+#                 greedy = mask / mask.sum()
+#                 pi_s_new = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones(self.action_size)
+#             gain = q_new @ (pi_s_new - pi_old[:, s])
+#             pi_new = pi_old.copy()
+#             pi_new[:, s] = pi_s_new
+# 
+#         # compute need according to updated successor representation
+#         need = pi_new[:, state].T @ M_new[:, state, s]
+# 
+#         # return product of gain and need terms
+#         return gain * need
+# 
+#     def update(self, current_exp, **kwargs):
+#         self.experiences.append(current_exp)
+# 
+#         # perform online update of M and w
+#         m_error = self.update_sr(current_exp, prospective=(not self.online), **kwargs)
+#         w_error = self.update_w(current_exp) if self.online else 0.0
+# 
+#         # list of possible experiences to update on
+#         unique_exps = list(set(self.experiences))
+# 
+#         self.recalled = []
+# 
+#         for k in range(self.num_recall):
+#             # compute expected value of backup for every possible experience
+#             evbs = [{"exp": exp, "evb": self.evb(current_exp[0], exp)} for exp in unique_exps]
+# 
+#             # get experience with the best evb
+#             best = sorted(evbs, key=lambda x: x["evb"]).pop()
+#             best_exp = best["exp"]
+#             self.prioritized_states[best_exp[0]] += 1
+#             self.recalled.append([best_exp])
+# 
+#             # update successor representation with this experience
+#             m_error = self.update_sr(best_exp)
+# 
+#         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
+#         return td_error

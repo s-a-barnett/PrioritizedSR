@@ -4,7 +4,6 @@ import numpy as np
 import numpy.random as npr
 import tqdm
 import time
-import pickle
 import uuid
 import os
 import sys
@@ -13,24 +12,6 @@ from prioritizedsr import algs, utils
 from prioritizedsr.gridworld import SimpleGrid, StochasticSimpleGrid
 
 MAX_TRAINING_EPISODES = 10000
-
-def agent_factory(args, state_size, action_size):
-    if args.agent == 'tdsr':
-        agent = algs.TDSR(state_size, action_size, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'dynasr':
-        agent = algs.DynaSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'dynaq':
-        agent = algs.DynaQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma)
-    elif args.agent == 'qparsr':
-        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=True, online=True)
-    elif args.agent == 'mparsr':
-        agent = algs.PARSR(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, goal_pri=False, online=True)
-    elif args.agent == 'mdq':
-        agent = algs.MDQ(state_size, action_size, args.num_recall, learning_rate=args.lr, gamma=args.gamma, online=True)
-    else:
-        raise ValueError('Invalid agent type: %s' % args.agent)
-
-    return agent
 
 def main(args):
     args_dict = vars(args).copy()
@@ -46,7 +27,7 @@ def main(args):
         env = StochasticSimpleGrid(args.grid_size, block_pattern='four_rooms')
     else:
         env = SimpleGrid(args.grid_size, block_pattern='four_rooms')
-    agent = agent_factory(args, env.state_size, env.action_size)
+    agent = utils.agent_factory(args, env.state_size, env.action_size)
     optimal_episode_length = 2 * (args.grid_size - 1)
 
     iterations = []

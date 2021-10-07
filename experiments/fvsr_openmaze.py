@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.random as npr
-import progressbar
+import tqdm
 import argparse
 import itertools
 import os
@@ -20,18 +20,6 @@ NUM_TRAIN = 50
 MAX_EPISODE_LENGTH = 10000
 
 grid_size = (6, 9)
-
-def agent_factory(args, state_size, action_size):
-    if args.agent == 'mdq':
-        agent = algs.MDQ(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, online=True)
-    elif args.agent == 'qparsr':
-        agent = algs.PARSR(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, goal_pri=True)
-    elif args.agent == 'mparsr':
-        agent = algs.PARSR(state_size, action_size, num_recall=num_recall, learning_rate=lr, gamma=gamma, goal_pri=False)
-    else:
-        raise ValueError('Invalid agent type: %s' % args.agent)
-
-    return agent
 
 def count_replay_events(recalls_list, args):
     replay_counts = {'f': 0, 'r': 0}
@@ -75,7 +63,7 @@ def count_replay_events(recalls_list, args):
 def openmaze_sim(args):
     env = SimpleGrid(grid_size, block_pattern='sutton')
     goal_pos = [0, 8]
-    agent = agent_factory(args, env.state_size, env.action_size)
+    agent = utils.agent_factory(args, env.state_size, env.action_size)
 
     # accumulate every possible experience not in goal state
     agent.num_recall = 0
@@ -160,7 +148,7 @@ def openmaze_sim(args):
 def main(args):
     npr.seed(0)
     replay_events = {'start_forward': 0, 'end_forward': 0, 'start_reverse': 0, 'end_reverse': 0}
-    for i in progressbar.progressbar(range(args.num_runs)):
+    for i in tqdm.tqdm(range(args.num_runs)):
         start_recalls, end_recalls = openmaze_sim(args)
         start_counts = count_replay_events(start_recalls, args)
         replay_events['start_forward'] += start_counts['f']

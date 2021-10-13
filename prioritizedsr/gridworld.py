@@ -75,6 +75,8 @@ class SimpleGrid:
         self.action_size = 4
         self.obs_mode = obs_mode
         self.state_size = self.grid_size[0] * self.grid_size[1]
+        self.teleports = {}
+        self.block_pattern = block_pattern
         self.blocks = self.make_blocks(block_pattern)
         self.goal_pos = [[]]
         self.agent_pos = []
@@ -83,10 +85,6 @@ class SimpleGrid:
 
     def reset(self, goal_pos=None, agent_pos=None, reward_val=None):
         self.done = False
-        if reward_val != None:
-            self.reward_val = reward_val
-        else:
-            self.reward_val = 1.0
         if goal_pos != None:
             # turn goal_pos into list of goal_pos if just one given
             if type(goal_pos[0]) == int:
@@ -94,6 +92,16 @@ class SimpleGrid:
             self.goal_pos = goal_pos
         else:
             self.goal_pos = [self.get_free_spot()]
+        if reward_val != None:
+            if type(reward_val) == list:
+                assert len(reward_val) == len(self.goal_pos)
+                self.reward_val = dict(zip([tuple(gp) for gp in self.goal_pos], reward_val))
+            elif np.isscalar(reward_val):
+                self.reward_val = reward_val
+            else:
+                raise ValueError('reward_val must be scalar or list')
+        else:
+            self.reward_val = 1.0
         if agent_pos != None:
             assert type(agent_pos[0]) == int
             assert len(agent_pos) == 2
@@ -114,6 +122,7 @@ class SimpleGrid:
 
     def make_blocks(self, pattern):
         if (pattern == 'four_rooms') or (pattern == 'four_rooms_blocked'):
+            assert self.grid_size[0] == self.grid_size[1]
             mid = int(self.grid_size[0] // 2)
             earl_mid = int(mid // 2)
             late_mid = mid+earl_mid + 1
@@ -125,6 +134,36 @@ class SimpleGrid:
                 self.bottlenecks.remove([earl_mid, mid])
             for bottleneck in self.bottlenecks:
                 blocks.remove(bottleneck)
+            return blocks
+        if (pattern == 'six_rooms') or (pattern == 'six_rooms_tr'):
+            assert self.grid_size[0] == self.grid_size[1]
+            gs = self.grid_size[0]
+            assert gs % 6 == 5
+            assert gs >= 11
+            self.onethird = int(gs // 3)
+            self.onesixth = int(self.onethird // 2)
+            self.twothird = int(2 * gs // 3)
+            self.mid = int(gs // 2)
+            self.fivesixth = int(5 * gs // 6)
+            blocks = []
+            blocks += [(self.onethird, i) for i in range(gs)]
+            blocks += [(i, self.onethird) for i in range(gs)]
+            blocks += [(self.twothird, i) for i in range(gs)]
+            blocks += [(i, self.twothird) for i in range(gs)]
+            blocks += [(i, j) for i, j in product(range(self.onethird+1, gs), range(self.twothird+1, gs))]
+            blocks += [(i, j) for i, j in product(range(self.twothird+1, gs), range(self.onethird+1, gs))]
+            self.bottlenecks = [(self.onesixth, self.onethird), (self.onesixth, self.twothird), (self.onethird, self.onesixth), 
+                                (self.onethird, self.mid), (self.mid, self.onethird), (self.twothird, self.onesixth)]
+            for bottleneck in self.bottlenecks:
+                blocks.remove(bottleneck)
+            blocks = [list(block) for block in list(set(blocks))]
+            if pattern == 'six_rooms_tr':
+                self.teleports = {
+                    (self.twothird, self.onesixth): {(1, 0): [self.onesixth, self.twothird+1]},
+                    (self.twothird+1, self.onesixth): {(-1, 0): [self.onesixth, self.twothird]},
+                    (self.onesixth, self.twothird): {(0, 1): [self.twothird+1, self.onesixth]},
+                    (self.onesixth, self.twothird+1): {(0, -1): [self.twothird, self.onesixth]}
+                }
             return blocks
         if pattern == 'empty':
             self.bottlenecks = []
@@ -217,7 +256,12 @@ class SimpleGrid:
 
     def move_agent(self, direction):
         if (self.agent_pos not in self.goal_pos) or (self.reward_val == 0):
-            new_pos = self.agent_pos + direction
+            if (self.block_pattern != 'six_rooms_tr') or \
+                (tuple(self.agent_pos) not in self.teleports.keys()) or \
+                (tuple(direction) not in self.teleports[tuple(self.agent_pos)].keys()):
+                new_pos = self.agent_pos + direction
+            else:
+                new_pos = self.teleports[tuple(self.agent_pos)][tuple(direction)]
             if self.check_target(new_pos):
                 self.agent_pos = list(new_pos)
 
@@ -308,13 +352,15 @@ class SimpleGrid:
         if (self.agent_pos in self.goal_pos) and (self.reward_val != 0):
             # treat an env with reward 0 as if it has no goal
             self.done = True
-            return self.reward_val
+            if np.isscalar(self.reward_val):
+                return self.reward_val
+            else:
+                return self.reward_val[tuple(self.agent_pos)]
         else:
             return 0.0
 
     def state_to_goal(self, state):
         return self.state_to_obs(state)
-
 
 
 class StochasticSimpleGrid(SimpleGrid):

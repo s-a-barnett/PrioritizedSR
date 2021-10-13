@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 
-output_file = 'hyperparameters_sequential.csv'
+output_file = 'hyperparameters_six_rooms.csv'
 real_path = os.path.realpath(__file__)
 dir_path = os.path.dirname(real_path)
 

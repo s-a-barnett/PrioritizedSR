@@ -6,7 +6,7 @@ import random
 from . import utils
 
 class TDQ:
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, poltype='softmax', Q_init=None, **kwargs):
+    def __init__(self, state_size, action_size, lr=1e-1, gamma=0.99, poltype='softmax', Q_init=None, **kwargs):
         self.state_size = state_size
         self.action_size = action_size
 
@@ -17,7 +17,7 @@ class TDQ:
         else:
             self.Q = Q_init
 
-        self.learning_rate = learning_rate
+        self.lr = lr
         self.gamma = gamma
         self.prioritized_states = np.zeros(state_size, dtype=np.int)
         self.num_updates = 0
@@ -52,7 +52,7 @@ class TDQ:
 
         if not prospective:
             # actually perform update to Q if not prospective
-            self.Q[s_a, s] += self.learning_rate * q_error
+            self.Q[s_a, s] += self.lr * q_error
         return q_error
 
     def update(self, current_exp, **kwargs):
@@ -222,7 +222,7 @@ class MDQ(TDQ):
 
         # compute new Q based on experience to be evaluated
         Q_s_new = Q_s_old.copy()
-        Q_s_new[a] += self.learning_rate * self.update_q(exp, prospective=True)
+        Q_s_new[a] += self.lr * self.update_q(exp, prospective=True)
 
         # compute gain term
         pi_s_new = softmax(beta * Q_s_new)
@@ -251,7 +251,7 @@ class MDQ(TDQ):
         st = exps[0][0]; action = exps[0][1]
         q_error = nstep_reward - self.Q[action, st]
         if not prospective:
-            self.Q[action, st] += self.learning_rate * q_error
+            self.Q[action, st] += self.lr * q_error
         return q_error
 
     def multistep_evb(self, state, exps, idx_recall, beta=5.0):
@@ -267,7 +267,7 @@ class MDQ(TDQ):
 
             # compute new Q based on experience to be evaluated
             Q_s_new = Q_s_old.copy()
-            Q_s_new[a] += self.learning_rate * self.update_q_nstep(exps[i:], prospective=True)
+            Q_s_new[a] += self.lr * self.update_q_nstep(exps[i:], prospective=True)
 
             # compute gain term
             pi_s_new = softmax(beta * Q_s_new)
@@ -344,7 +344,7 @@ class MDQ(TDQ):
 
 class TDSR:
 
-    def __init__(self, state_size, action_size, learning_rate=1e-1, gamma=0.99, M_init=None, poltype='softmax', weights='direct', **kwargs):
+    def __init__(self, state_size, action_size, lr=1e-1, gamma=0.99, M_init=None, poltype='softmax', weights='direct', **kwargs):
         self.state_size = state_size
         self.action_size = action_size
 
@@ -359,7 +359,7 @@ class TDSR:
             self.M = M_init
         
         self.w = np.zeros(state_size)
-        self.learning_rate = learning_rate
+        self.lr = lr
         self.gamma = gamma
         self.prioritized_states = np.zeros(state_size, dtype=np.int)
         self.num_updates = 0
@@ -383,7 +383,7 @@ class TDSR:
         s, a, s_1, r, _ = current_exp
         if self.weights == 'direct':
             error = r - self.w[s_1]
-            self.w[s_1] += self.learning_rate * error
+            self.w[s_1] += self.lr * error
         elif self.weights == 'td':
             Vs = self.Q_estimates(s).max()
             Vs_1 = self.Q_estimates(s_1).max()
@@ -391,7 +391,7 @@ class TDSR:
             # epsilon and beta are hard-coded, need to improve this
             M = self.get_M_states(epsilon=1e-1, beta=5)
             error = delta * M[s]
-            self.w += self.learning_rate * error
+            self.w += self.lr * error
         return np.linalg.norm(error)
 
     def update_sr(self, current_exp, next_exp=None, prospective=False):
@@ -416,7 +416,7 @@ class TDSR:
 
         if not prospective:
             # actually perform update to SR if not prospective
-            self.M[s_a, s, :] += self.learning_rate * m_error
+            self.M[s_a, s, :] += self.lr * m_error
         return m_error
 
     def update(self, current_exp, **kwargs):
@@ -689,12 +689,12 @@ class PEPARSR(TDSR):
             self.recalled.append([exp])
 
             # compute importance weight
-            self.learning_rate *= weight
+            self.lr *= weight
 
             # update M and w
             m_error = self.update_sr(exp)
             w_error = self.update_w(exp)
-            self.learning_rate /= weight
+            self.lr /= weight
 
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error
@@ -716,10 +716,10 @@ class PEPARSR(TDSR):
 # 
 #         # compute new M and w based on experience to be evaluated
 #         M_new = self.M.copy()
-#         M_new[s_a, s, :] += self.learning_rate * self.update_sr(exp, prospective=True)
+#         M_new[s_a, s, :] += self.lr * self.update_sr(exp, prospective=True)
 #         w_new = self.w.copy()
 #         w_error = r - w_new[s_1]
-#         w_new[s_1] += self.learning_rate * w_error
+#         w_new[s_1] += self.lr * w_error
 # 
 #         # get old policy as a baseline
 #         pi_old = self.get_policy(epsilon=epsilon, beta=beta)

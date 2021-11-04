@@ -13,7 +13,7 @@ from prioritizedsr.gridworld import SimpleGrid
 NUM_RUNS = 10
 MAX_EPISODE_LENGTH = 10000
 MAX_TRAINING_EPISODES = 1000
-MAX_INTRO = 100
+MAX_INTRO = 10
 condition_rewards = {
     'control': [15.0, 0.0, 45.0],
     'transition': [15.0, 0.0, 30.0],

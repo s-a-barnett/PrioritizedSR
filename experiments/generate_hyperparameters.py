@@ -8,9 +8,9 @@ dir_path = os.path.dirname(real_path)
 
 agents  = ['mparsr', 'qparsr', 'dynasr', 'tdsr', 'psq', 'dynaq', 'tdq']
 lrs     = [0.3]
-num_recalls = [1, 3, 10, 30, 100]
+num_recalls = [10, 30, 100, 300, 1000]
 seeds = list(range(10))
-betas = [0, 5]
+betas = [0]
 conditions = ['control', 'reward', 'transition', 'policy']
 
 index = pd.MultiIndex.from_product([agents, lrs, num_recalls, seeds, conditions, betas], names=['agent', 'lr', 'num_recall', 'seed', 'condition', 'beta'])

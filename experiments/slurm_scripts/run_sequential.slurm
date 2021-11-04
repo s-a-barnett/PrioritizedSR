@@ -6,19 +6,19 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=4G
-#SBATCH --time=23:59:59
+#SBATCH --time=02:00:00
 #SBATCH --array=0-199
 #SBATCH --mail-type=all
 #SBATCH --mail-user=samuelab@princeton.edu
 
 module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
-mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/
+mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/run3/
 
-START=$(( $SLURM_ARRAY_TASK_ID * 14 ))
-END=$(( $START + 13 ))
+START=$(( $SLURM_ARRAY_TASK_ID * 7 ))
+END=$(( $START + 6 ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py sequential.py hyperparameters/hyperparameters_sequential.csv $i /tigress/samuelab/PrioritizedSR/logs/sequential/results_sequential.csv
+    srun python train_from_hyperparameters.py sequential.py hyperparameters/hyperparameters_sequential.csv $i /tigress/samuelab/PrioritizedSR/logs/sequential/run3/results_sequential.csv
 done
 

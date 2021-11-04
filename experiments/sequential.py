@@ -12,7 +12,7 @@ from prioritizedsr.gridworld import Sequential
 
 NUM_RUNS = 100
 MAX_TRAINING_EPISODES = 100
-MAX_INTRO = 100
+MAX_INTRO = 6
 condition_rewards = {
     'control': [15.0, 0.0, 45.0],
     'transition': [15.0, 0.0, 30.0],
@@ -119,7 +119,7 @@ def main(args):
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True
-                break
+                # break
 
         # == PHASE 2: TEST ==
         num_eps_phase2 += (j+1) / NUM_RUNS

@@ -108,7 +108,7 @@ def main(args):
 
         for j in range(MAX_INTRO):
             # train agent
-            for state in [1, 2]:
+            for state in [3, 4, 5]:
                 for action in [0, 1]:
                     env.reset(agent_pos=state, reward_val=reward_val)
                     reward = env.step(action)

@@ -108,6 +108,10 @@ def main(args):
         if passed_phase1:
             learns_p1 += 1 / NUM_RUNS
         else:
+            Qs[i] = agent.Q.copy()
+            if 'sr' in args.agent:
+                Ms[i] = agent.M.copy()
+            pss[i] = agent.prioritized_states.copy()
             continue
 
         # == PHASE 2: TRAIN ==
@@ -145,6 +149,10 @@ def main(args):
         if passed_phase2:
             learns_p2 += 1 / NUM_RUNS
         else:
+            Qs[i] = agent.Q.copy()
+            if 'sr' in args.agent:
+                Ms[i] = agent.M.copy()
+            pss[i] = agent.prioritized_states.copy()
             continue
 
         # == PHASE 3: TEST ==

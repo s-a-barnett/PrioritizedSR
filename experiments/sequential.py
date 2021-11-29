@@ -12,7 +12,7 @@ from prioritizedsr.gridworld import Sequential
 
 NUM_RUNS = 100
 MAX_TRAINING_EPISODES = 100
-MAX_INTRO = 6
+MAX_INTRO = 100
 condition_rewards = {
     'control': [15.0, 0.0, 45.0],
     'transition': [15.0, 0.0, 30.0],
@@ -31,15 +31,31 @@ condition_p23acts = {
     'reward': [0, 0, 1],
     'policy': [0, 0, 1]
 }
+condition_p2orders = {
+    'control': [1, 0, 2],
+    'reward': [2, 0, 1],
+    'policy': [2, 0, 1]
+}
 
 def test_agent(agent, phase, condition):
-    policy = agent.Q.argmax(0)
+    Q = agent.Q
+    policy = Q.argmax(0)
     if phase == 1:
         correct_acts = condition_p1acts[condition]
         return np.allclose(policy[:3], correct_acts)
     elif phase == 2:
-        correct_acts = condition_p23acts[condition]
-        return np.allclose(policy[1:3], correct_acts[1:])
+        if condition != 'transition':
+            V_term = Q.max(0)[3:]
+            correct_order = np.argsort(condition_rewards[condition])
+            return np.allclose(correct_order, np.argsort(V_term))
+        else:
+            # M = agent.M
+            # M[0, 1, 4] > M[0, 1, 3]
+            # M[1, 1, 5] > M[1, 1, 4]
+            # M[0, 2, 3] > M[0, 2, 4]
+            # M[1, 2, 4] > M[1, 2, 5]
+            correct_acts = condition_p23acts[condition]
+            return np.allclose(policy[1:3], correct_acts[1:])
     elif phase == 3:
         correct_acts = condition_p23acts[condition]
         return np.allclose(policy[0], correct_acts[0])
@@ -106,9 +122,11 @@ def main(args):
         phase2_results = []
         passed_phase2 = False
 
+        introstates = [1, 2] if args.condition == 'transition' else [3, 4, 5]
+
         for j in range(MAX_INTRO):
             # train agent
-            for state in [3, 4, 5]:
+            for state in introstates:
                 for action in [0, 1]:
                     env.reset(agent_pos=state, reward_val=reward_val)
                     reward = env.step(action)
@@ -119,7 +137,7 @@ def main(args):
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True
-                # break
+                break
 
         # == PHASE 2: TEST ==
         num_eps_phase2 += (j+1) / NUM_RUNS

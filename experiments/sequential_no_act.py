@@ -8,65 +8,37 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from prioritizedsr import algs, utils
-from prioritizedsr.gridworld import Sequential
+from prioritizedsr.gridworld import SequentialNoAct
 
 NUM_RUNS = 100
 MAX_TRAINING_EPISODES = 100
 MAX_INTRO = 100
 condition_rewards = {
-    'control': [15.0, 0.0, 45.0],
-    'transition': [15.0, 0.0, 30.0],
-    'reward': [45.0, 0.0, 30.0],
-    'policy': [45.0, 15.0, 30.0]
-}
-condition_p1acts = {
-    'control': [1, 0, 1],
-    'transition': [1, 0, 1],
-    'reward': [1, 0, 1],
-    'policy': [1, 1, 1]
-}
-condition_p23acts = {
-    'control': [1, 0, 1],
-    'transition': [0, 1, 0],
-    'reward': [0, 0, 1],
-    'policy': [0, 0, 1]
-}
-condition_p2orders = {
-    'control': [1, 0, 2],
-    'reward': [2, 0, 1],
-    'policy': [2, 0, 1]
+    'control': [10.0, 1.0],
+    'transition': [10.0, 1.0],
+    'reward': [1.0, 10.0],
 }
 
 def test_agent(agent, phase, condition):
     Q = agent.Q
-    policy = Q.argmax(0)
+    V = Q.max(0)
     if phase == 1:
-        correct_acts = condition_p1acts[condition]
-        return np.allclose(policy[:3], correct_acts)
+        return V[0] > V[1]
     elif phase == 2:
-        if condition != 'transition':
-            if hasattr(agent, 'w'):
-                V_term = agent.w[3:]
-            else:
-                V_term = Q.max(0)[3:]
-            correct_order = np.argsort(condition_rewards[condition])
-            return np.allclose(correct_order, np.argsort(V_term))
+        if condition != 'control':
+            return V[2] < V[3]
         else:
-            # M = agent.M
-            # M[0, 1, 4] > M[0, 1, 3]
-            # M[1, 1, 5] > M[1, 1, 4]
-            # M[0, 2, 3] > M[0, 2, 4]
-            # M[1, 2, 4] > M[1, 2, 5]
-            correct_acts = condition_p23acts[condition]
-            return np.allclose(policy[1:3], correct_acts[1:])
+            return V[2] > V[3]
     elif phase == 3:
-        correct_acts = condition_p23acts[condition]
-        return np.allclose(policy[0], correct_acts[0])
+        if condition != 'control':
+            return V[0] < V[1]
+        else:
+            return V[0] > V[1]
     else:
         raise ValueError('phase must be 1, 2, or 3')
 
 def main(args):
-    assert args.condition in ['control', 'transition', 'reward', 'policy']
+    assert args.condition in ['control', 'transition', 'reward']
     learns_p1, learns_p2, learns_p3 = 0, 0, 0
     args_dict = vars(args).copy()
     del args_dict['output']
@@ -78,7 +50,7 @@ def main(args):
 
     npr.seed(args.seed)
     agent_pos = 0
-    env = Sequential()
+    env = SequentialNoAct()
 
     Qs = np.zeros((NUM_RUNS, env.action_size, env.state_size))
     Ms = np.zeros((NUM_RUNS, env.action_size, env.state_size, env.state_size))
@@ -88,21 +60,18 @@ def main(args):
     num_eps_phase2 = 0
 
     for i in tqdm.tqdm(range(NUM_RUNS)):
-        env = Sequential()
+        env = SequentialNoAct()
         agent = utils.agent_factory(args, env.state_size, env.action_size)
 
         # == PHASE 1: TRAIN ==
-        if args.condition == 'policy':
-            reward_val = [0.0, 15.0, 30.0]
-        else:    
-            reward_val = [15.0, 0.0, 30.0]
+        reward_val = [10.0, 1.0]
 
         phase1_results = []
         passed_phase1 = False
 
         for j in range(MAX_TRAINING_EPISODES):
             # train for an episode
-            _, _ = utils.run_episode(agent, env, beta=args.beta, reward_val=reward_val)
+            _, _ = utils.run_episode(agent, env, agent_pos=(j%2), reward_val=reward_val)
             # test agent
             phase1_results.append(test_agent(agent, 1, args.condition))
             if np.sum(np.array(phase1_results)[-3:]) == 3:
@@ -120,22 +89,21 @@ def main(args):
         reward_val = condition_rewards[args.condition]
 
         if args.condition == 'transition':
-            env = Sequential(transition_pattern='reval')
+            env = SequentialNoAct(transition_pattern='reval')
 
         phase2_results = []
         passed_phase2 = False
 
-        introstates = [1, 2] if args.condition == 'transition' else [3, 4, 5]
+        introstates = [2, 3]
 
         for j in range(MAX_INTRO):
             # train agent
             for state in introstates:
-                for action in [0, 1]:
-                    env.reset(agent_pos=state, reward_val=reward_val)
-                    reward = env.step(action)
-                    state_next = env.observation
-                    done = env.done
-                    agent.update((state, action, state_next, reward, done))
+                env.reset(agent_pos=state, reward_val=reward_val)
+                reward = env.step(0)
+                state_next = env.observation
+                done = env.done
+                agent.update((state, 0, state_next, reward, done))
             # test agent
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
@@ -183,7 +151,6 @@ if __name__ == '__main__':
     parser.add_argument('--num_recall', type=int, default=10, help='number of recalls')
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
-    parser.add_argument('--beta', type=float, default=5, help='softmax inverse temp')
     parser.add_argument('--theta', type=float, default=1e-6, help='ps theta')
     parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
     parser.add_argument('--output', type=str, help='path to results file')

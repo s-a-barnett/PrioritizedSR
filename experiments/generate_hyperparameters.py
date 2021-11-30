@@ -6,7 +6,7 @@ output_file = 'hyperparameters_sequential.csv'
 real_path = os.path.realpath(__file__)
 dir_path = os.path.dirname(real_path)
 
-agents  = ['mparsr', 'qparsr', 'dynasr', 'psq', 'dynaq']
+agents  = ['mparsr', 'qparsr', 'dynasr']
 lrs     = [0.3]
 num_recalls = [10, 30, 100]
 seeds = list(range(10))

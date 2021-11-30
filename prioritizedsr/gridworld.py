@@ -3,6 +3,54 @@ import numpy.random as npr
 from . import utils
 from itertools import product
 
+class SequentialNoAct:
+    def __init__(self, transition_pattern=None):
+        self.transition_pattern = transition_pattern
+        self.action_size = 1
+        self.state_size = 6
+        self.done = None
+        self.num_steps = 0
+        self.agent_pos = None
+        self.reward_val = None
+        self.transitions = self.make_transitions(transition_pattern)
+        self.goal_pos = None
+
+    def make_transitions(self, transition_pattern):
+        if transition_pattern is None:
+            transitions = [2, 3, 4, 5, 4, 5]
+        else:
+            assert transition_pattern == 'reval'
+            transitions = [2, 3, 5, 4, 4, 5]
+        return transitions        
+
+    def reset(self, agent_pos=None, goal_pos=None, reward_val=None):
+        self.done = False
+        if reward_val is None:
+            self.reward_val = [10.0, 1.0]
+        else:
+            assert len(reward_val) == 2
+            self.reward_val = reward_val
+        if agent_pos is None:
+            self.agent_pos = npr.choice(2)
+        else:
+            assert type(agent_pos) == np.int
+            assert agent_pos < self.state_size
+            self.agent_pos = agent_pos
+
+    @property
+    def observation(self):
+        return self.agent_pos
+
+    def step(self, action=None):
+        # ignores action input
+        self.agent_pos = self.transitions[self.agent_pos]
+        self.num_steps += 1
+        if self.agent_pos > 3:
+            self.done = True
+            return self.reward_val[self.agent_pos - 4]
+        else:
+            return 0.0
+
 class Sequential:
     def __init__(self, transition_pattern=None):
         self.transition_pattern = transition_pattern

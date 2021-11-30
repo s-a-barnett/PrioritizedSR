@@ -13,12 +13,12 @@
 
 module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
-mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/run5/
+mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/run6/
 
-START=$(( $SLURM_ARRAY_TASK_ID * 9 ))
-END=$(( $START + 8 ))
+START=$(( $SLURM_ARRAY_TASK_ID * 6 ))
+END=$(( $START + 5 ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py sequential.py hyperparameters/hyperparameters_sequential.csv $i /tigress/samuelab/PrioritizedSR/logs/sequential/run5/results_sequential.csv
+    srun python train_from_hyperparameters.py sequential.py hyperparameters/hyperparameters_sequential.csv $i /tigress/samuelab/PrioritizedSR/logs/sequential/run6/results_sequential.csv
 done
 

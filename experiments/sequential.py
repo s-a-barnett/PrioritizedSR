@@ -10,9 +10,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from prioritizedsr import algs, utils
 from prioritizedsr.gridworld import Sequential
 
-NUM_RUNS = 100
-MAX_TRAINING_EPISODES = 100
-MAX_INTRO = 100
 condition_rewards = {
     'control': [15.0, 0.0, 45.0],
     'transition': [15.0, 0.0, 30.0],
@@ -37,18 +34,27 @@ condition_p2orders = {
     'policy': [2, 0, 1]
 }
 
+def state_weights(agent):
+    if hasattr(agent, 'w'):
+        return agent.w.copy()
+    else:
+        return agent.Q.max(0).copy()
+
 def test_agent(agent, phase, condition):
     Q = agent.Q
     policy = Q.argmax(0)
+
+    # guarantee uniqueness of policy (prevents spuriously passing test)
+    unique_action_in_state = ((Q == Q.max(0)).sum(0) == 1)
+    if not np.all(unique_action_in_state[:3]):
+        return False
+
     if phase == 1:
         correct_acts = condition_p1acts[condition]
         return np.allclose(policy[:3], correct_acts)
     elif phase == 2:
         if condition != 'transition':
-            if hasattr(agent, 'w'):
-                V_term = agent.w[3:]
-            else:
-                V_term = Q.max(0)[3:]
+            V_term = state_weights(agent)[3:]
             correct_order = np.argsort(condition_rewards[condition])
             return np.allclose(correct_order, np.argsort(V_term))
         else:
@@ -80,14 +86,14 @@ def main(args):
     agent_pos = 0
     env = Sequential()
 
-    Qs = np.zeros((NUM_RUNS, env.action_size, env.state_size))
-    Ms = np.zeros((NUM_RUNS, env.action_size, env.state_size, env.state_size))
-    pss = np.zeros((NUM_RUNS, env.state_size))
+    Qs = np.zeros((args.num_runs, env.action_size, env.state_size))
+    Ms = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
+    pss = np.zeros((args.num_runs, env.state_size))
 
     num_eps_phase1 = 0
     num_eps_phase2 = 0
 
-    for i in tqdm.tqdm(range(NUM_RUNS)):
+    for i in tqdm.tqdm(range(args.num_runs)):
         env = Sequential()
         agent = utils.agent_factory(args, env.state_size, env.action_size)
 
@@ -100,9 +106,12 @@ def main(args):
         phase1_results = []
         passed_phase1 = False
 
-        for j in range(MAX_TRAINING_EPISODES):
+        # weights = []
+
+        for j in range(args.max_episodes):
             # train for an episode
-            _, _ = utils.run_episode(agent, env, beta=args.beta, reward_val=reward_val)
+            _, _ = utils.run_episode(agent, env, beta=args.beta, reward_val=reward_val, agent_pos=0)
+            # weights.append(state_weights(agent))
             # test agent
             phase1_results.append(test_agent(agent, 1, args.condition))
             if np.sum(np.array(phase1_results)[-3:]) == 3:
@@ -110,9 +119,9 @@ def main(args):
                 break
 
         # == PHASE 1: TEST ==
-        num_eps_phase1 += (j+1) / NUM_RUNS
+        num_eps_phase1 += (j+1) / args.num_runs
         if passed_phase1:
-            learns_p1 += 1 / NUM_RUNS
+            learns_p1 += 1 / args.num_runs
         else:
             continue
 
@@ -127,7 +136,7 @@ def main(args):
 
         introstates = [1, 2] if args.condition == 'transition' else [3, 4, 5]
 
-        for j in range(MAX_INTRO):
+        for j in range(args.max_episodes):
             # train agent
             for state in introstates:
                 for action in [0, 1]:
@@ -136,21 +145,23 @@ def main(args):
                     state_next = env.observation
                     done = env.done
                     agent.update((state, action, state_next, reward, done))
+            # weights.append(state_weights(agent))
             # test agent
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True
                 break
 
+        # weights_all_runs.append(np.stack(weights))
         # == PHASE 2: TEST ==
-        num_eps_phase2 += (j+1) / NUM_RUNS
+        num_eps_phase2 += (j+1) / args.num_runs
         if passed_phase2:
-            learns_p2 += 1 / NUM_RUNS
+            learns_p2 += 1 / args.num_runs
         else:
             continue
 
         # == PHASE 3: TEST ==
-        learns_p3 += test_agent(agent, 3, args.condition) / NUM_RUNS
+        learns_p3 += test_agent(agent, 3, args.condition) / args.num_runs
 
         Qs[i] = agent.Q.copy()
         if 'sr' in args.agent:
@@ -186,6 +197,8 @@ if __name__ == '__main__':
     parser.add_argument('--beta', type=float, default=5, help='softmax inverse temp')
     parser.add_argument('--theta', type=float, default=1e-6, help='ps theta')
     parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
+    parser.add_argument('--num_runs', type=int, default=100, help='experiment runs')
+    parser.add_argument('--max_episodes', type=int, default=10000, help='phase iter size')
     parser.add_argument('--output', type=str, help='path to results file')
     args = parser.parse_args()
     main(args)

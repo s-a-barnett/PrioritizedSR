@@ -10,9 +10,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from prioritizedsr import algs, utils
 from prioritizedsr.gridworld import SequentialNoAct
 
-NUM_RUNS = 100
-MAX_TRAINING_EPISODES = 100
-MAX_INTRO = 100
 condition_rewards = {
     'control': [10.0, 1.0],
     'transition': [10.0, 1.0],
@@ -52,14 +49,14 @@ def main(args):
     agent_pos = 0
     env = SequentialNoAct()
 
-    Qs = np.zeros((NUM_RUNS, env.action_size, env.state_size))
-    Ms = np.zeros((NUM_RUNS, env.action_size, env.state_size, env.state_size))
-    pss = np.zeros((NUM_RUNS, env.state_size))
+    Qs = np.zeros((args.num_runs, env.action_size, env.state_size))
+    Ms = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
+    pss = np.zeros((args.num_runs, env.state_size))
 
     num_eps_phase1 = 0
     num_eps_phase2 = 0
 
-    for i in tqdm.tqdm(range(NUM_RUNS)):
+    for i in tqdm.tqdm(range(args.num_runs)):
         env = SequentialNoAct()
         agent = utils.agent_factory(args, env.state_size, env.action_size)
 
@@ -69,7 +66,7 @@ def main(args):
         phase1_results = []
         passed_phase1 = False
 
-        for j in range(MAX_TRAINING_EPISODES):
+        for j in range(args.max_episodes):
             # train for an episode
             _, _ = utils.run_episode(agent, env, agent_pos=(j%2), reward_val=reward_val)
             # test agent
@@ -79,9 +76,9 @@ def main(args):
                 break
 
         # == PHASE 1: TEST ==
-        num_eps_phase1 += (j+1) / NUM_RUNS
+        num_eps_phase1 += (j+1) / args.num_runs
         if passed_phase1:
-            learns_p1 += 1 / NUM_RUNS
+            learns_p1 += 1 / args.num_runs
         else:
             continue
 
@@ -96,7 +93,7 @@ def main(args):
 
         introstates = [2, 3]
 
-        for j in range(MAX_INTRO):
+        for j in range(args.max_episodes):
             # train agent
             for state in introstates:
                 env.reset(agent_pos=state, reward_val=reward_val)
@@ -111,14 +108,14 @@ def main(args):
                 break
 
         # == PHASE 2: TEST ==
-        num_eps_phase2 += (j+1) / NUM_RUNS
+        num_eps_phase2 += (j+1) / args.num_runs
         if passed_phase2:
-            learns_p2 += 1 / NUM_RUNS
+            learns_p2 += 1 / args.num_runs
         else:
             continue
 
         # == PHASE 3: TEST ==
-        learns_p3 += test_agent(agent, 3, args.condition) / NUM_RUNS
+        learns_p3 += test_agent(agent, 3, args.condition) / args.num_runs
 
         Qs[i] = agent.Q.copy()
         if 'sr' in args.agent:
@@ -153,6 +150,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
     parser.add_argument('--theta', type=float, default=1e-6, help='ps theta')
     parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
+    parser.add_argument('--num_runs', type=int, default=100, help='experiment runs')
+    parser.add_argument('--max_episodes', type=int, default=10000, help='phase iter size')
     parser.add_argument('--output', type=str, help='path to results file')
     args = parser.parse_args()
     main(args)

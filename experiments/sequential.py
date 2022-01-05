@@ -139,12 +139,13 @@ def main(args):
         for j in range(args.max_episodes):
             # train agent
             for state in introstates:
-                for action in [0, 1]:
-                    env.reset(agent_pos=state, reward_val=reward_val)
-                    reward = env.step(action)
-                    state_next = env.observation
-                    done = env.done
-                    agent.update((state, action, state_next, reward, done))
+                _, _ = utils.run_episode(agent, env, beta=args.beta,reward_val=reward_val, agent_pos=state)
+                # for action in [0, 1]:
+                #     env.reset(agent_pos=state, reward_val=reward_val)
+                #     reward = env.step(action)
+                #     state_next = env.observation
+                #     done = env.done
+                #     agent.update((state, action, state_next, reward, done))
             # weights.append(state_weights(agent))
             # test agent
             phase2_results.append(test_agent(agent, 2, args.condition))

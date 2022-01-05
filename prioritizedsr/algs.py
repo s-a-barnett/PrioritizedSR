@@ -70,6 +70,11 @@ class TDQ:
             policy = (1 - epsilon) * greedy + (1 / self.action_size) * epsilon * np.ones((self.action_size, self.state_size))
         return policy
 
+    @property
+    def V(self):
+        Q = self.Q
+        return Q.max(0)
+
 class DynaQ(TDQ):
 
     def __init__(self, state_size, action_size, num_recall=10, **kwargs):
@@ -452,6 +457,10 @@ class TDSR:
     def Q(self):
         return self.M @ self.w
 
+    @property
+    def V(self):
+        Q = self.Q
+        return Q.max(0)
 
 class DynaSR(TDSR):
     
@@ -504,7 +513,8 @@ class DynaSR(TDSR):
         for i in range(self.num_recall):
             exp = self._sample_model()
             self.prioritized_states[exp[0]] += 1
-            super().update(exp)
+            m_error = self.update_sr(exp, **kwargs)
+            self.num_updates += 1
 
         return td_error
 
@@ -617,13 +627,13 @@ class PARSR(TDSR):
 
             # update M and w based on this experience
             m_error = self.update_sr(exp)
-            w_error = self.update_w(exp)
+            # w_error = self.update_w(exp)
 
             for s, a in self.predecessors[state]:
                 # add predecessors to priority queue
                 exp_pred = (s, a) + self.model[(s, a)]
                 m_error = self.update_sr(exp_pred, prospective=(not self.online))
-                w_error = self.update_w(current_exp)
+                # w_error = self.update_w(current_exp)
                 priority = self.priority(m_error, exp_pred)
                 if priority >= self.theta:
                     self.pqueue.push((s, a), -priority)
@@ -693,7 +703,7 @@ class PEPARSR(TDSR):
 
             # update M and w
             m_error = self.update_sr(exp)
-            w_error = self.update_w(exp)
+            # w_error = self.update_w(exp)
             self.lr /= weight
 
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}

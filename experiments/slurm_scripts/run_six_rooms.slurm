@@ -13,12 +13,13 @@
 
 module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
-mkdir -p /tigress/samuelab/PrioritizedSR/logs/six_rooms/run3/
+# mkdir -p /tigress/samuelab/PrioritizedSR/logs/six_rooms/run3/
 
-START=$(( $SLURM_ARRAY_TASK_ID * 8 ))
-END=$(( $START + 7 ))
+ITERS_PER_JOB=9
+START=$(( $SLURM_ARRAY_TASK_ID * $ITERS_PER_JOB ))
+END=$(( $START + $(($ITERS_PER_JOB - 1)) ))
 for i in $(seq $START $END)
 do
-    srun python train_from_hyperparameters.py six_rooms.py hyperparameters/hyperparameters_six_rooms.csv $i /tigress/samuelab/PrioritizedSR/logs/six_rooms/run3/results_six_rooms.csv
+    srun python train_from_hyperparameters.py six_rooms.py hyperparameters/hyperparameters_six_rooms.csv $i /scratch/gpfs/samuelab/parsr/results_six_rooms.csv
 done
 

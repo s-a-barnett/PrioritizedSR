@@ -16,6 +16,12 @@ condition_rewards = {
     'reward': [1.0, 10.0],
 }
 
+def state_weights(agent):
+    if hasattr(agent, 'w'):
+        return agent.w.copy()
+    else:
+        return agent.Q.max(0).copy()
+
 def test_agent(agent, phase, condition):
     Q = agent.Q
     V = Q.max(0)
@@ -56,6 +62,10 @@ def main(args):
     num_eps_phase1 = 0
     num_eps_phase2 = 0
 
+    weights_allruns = []
+    srs_allruns = []
+    max_run_length = 0
+
     for i in tqdm.tqdm(range(args.num_runs)):
         env = SequentialNoAct()
         agent = utils.agent_factory(args, env.state_size, env.action_size)
@@ -66,9 +76,14 @@ def main(args):
         phase1_results = []
         passed_phase1 = False
 
+        weights = []
+        srs = []
+
         for j in range(args.max_episodes):
             # train for an episode
             _, _ = utils.run_episode(agent, env, agent_pos=(j%2), reward_val=reward_val)
+            weights.append(state_weights(agent))
+            srs.append(agent.M[0])
             # test agent
             phase1_results.append(test_agent(agent, 1, args.condition))
             if np.sum(np.array(phase1_results)[-3:]) == 3:
@@ -101,11 +116,17 @@ def main(args):
                 state_next = env.observation
                 done = env.done
                 agent.update((state, 0, state_next, reward, done))
+            weights.append(state_weights(agent))
+            srs.append(agent.M[0])
             # test agent
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True
                 break
+
+        weights_allruns.append(np.stack(weights))
+        srs_allruns.append(np.stack(srs))
+        max_run_length = np.maximum(max_run_length, len(srs))
 
         # == PHASE 2: TEST ==
         num_eps_phase2 += (j+1) / args.num_runs
@@ -129,10 +150,22 @@ def main(args):
     os.mkdir(log_dir)
     np.save(os.path.join(log_dir, 'prioritized_states.npy'), pss)
 
+    for idx in range(len(weights_allruns)):
+        weights = weights_allruns[idx]
+        pad_width = int(max_run_length - weights.shape[0])
+        weights = np.pad(weights, ((0, pad_width), (0, 0)))
+        weights_allruns[idx] = weights
+        if 'sr' in args.agent:
+            srs = srs_allruns[idx]
+            srs = np.pad(srs, ((0, pad_width), (0, 0), (0, 0)))
+            srs_allruns[idx] = srs
+
     if 'sr' in args.agent:
         np.save(os.path.join(log_dir, 'Ms.npy'), Ms)
+        np.save(os.path.join(log_dir, 'srs.npy'), np.stack(srs_allruns))
 
     np.save(os.path.join(log_dir, 'Qs.npy'), Qs)
+    np.save(os.path.join(log_dir, 'weights.npy'), np.stack(weights_allruns))
 
     args_vals = [str(val) for val in args_dict.values()]
 
@@ -142,6 +175,9 @@ def main(args):
     return 0
 
 if __name__ == '__main__':
+    default_path = os.path.join(os.path.expanduser('~'), 
+                                'scr/parsr/out.csv')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--condition', type=str, default='control', help='experiment type')
@@ -152,7 +188,7 @@ if __name__ == '__main__':
     parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
     parser.add_argument('--num_runs', type=int, default=100, help='experiment runs')
     parser.add_argument('--max_episodes', type=int, default=10000, help='phase iter size')
-    parser.add_argument('--output', type=str, help='path to results file')
+    parser.add_argument('--output', type=str, default=default_path,  help='path to results file')
     args = parser.parse_args()
     main(args)
 

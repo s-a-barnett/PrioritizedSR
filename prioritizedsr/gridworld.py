@@ -183,16 +183,21 @@ class SimpleGrid:
             for bottleneck in self.bottlenecks:
                 blocks.remove(bottleneck)
             return blocks
+
         if (pattern == 'six_rooms') or (pattern == 'six_rooms_tr'):
             assert self.grid_size[0] == self.grid_size[1]
             gs = self.grid_size[0]
             assert gs % 6 == 5
             assert gs >= 11
+
+            # get relative positions for walls and bottlenecks
             self.onethird = int(gs // 3)
             self.onesixth = int(self.onethird // 2)
             self.twothird = int(2 * gs // 3)
             self.mid = int(gs // 2)
             self.fivesixth = int(5 * gs // 6)
+
+            # generate the walls
             blocks = []
             blocks += [(self.onethird, i) for i in range(gs)]
             blocks += [(i, self.onethird) for i in range(gs)]
@@ -205,23 +210,38 @@ class SimpleGrid:
             for bottleneck in self.bottlenecks:
                 blocks.remove(bottleneck)
             blocks = [list(block) for block in list(set(blocks))]
+
+            # prevent agent from travelling back up the grid
+            self.teleports = {
+                (self.onethird+1, self.onesixth): {(-1, 0): [self.onethird+1, self.onesixth]},
+                (self.onesixth, self.onethird+1): {(0, -1): [self.onesixth, self.onethird+1]},
+                (self.twothird+1, self.onesixth): {(-1, 0): [self.twothird+1, self.onesixth]},
+                (self.mid, self.onethird+1): {(0, -1): [self.mid, self.onethird+1]},
+                (self.onethird+1, self.mid): {(-1, 0): [self.onethird+1, self.mid]},
+                (self.onesixth, self.twothird+1): {(0, -1): [self.onesixth, self.twothird+1]},
+            }
+
+            # add further teleports for transition revaluation task
             if pattern == 'six_rooms_tr':
-                self.teleports = {
-                    (self.twothird, self.onesixth): {(1, 0): [self.onesixth, self.twothird+1]},
-                    (self.twothird+1, self.onesixth): {(-1, 0): [self.onesixth, self.twothird]},
-                    (self.onesixth, self.twothird): {(0, 1): [self.twothird+1, self.onesixth]},
-                    (self.onesixth, self.twothird+1): {(0, -1): [self.twothird, self.onesixth]}
-                }
+                self.teleports.update({
+                    (self.twothird, self.onesixth): {(1, 0): [self.mid, self.onethird+1]},
+                    (self.mid, self.onethird): {(0, 1): [self.onesixth, self.twothird+1]},
+                    (self.onethird, self.mid): {(1, 0): [self.twothird+1, self.onesixth]},
+                    (self.onesixth, self.twothird): {(0, 1): [self.onethird+1, self.mid]},
+                })
             return blocks
+
         if pattern == 'empty':
             self.bottlenecks = []
             return []
+
         if pattern == 'random':
             blocks = []
             for i in range(self.state_size // 10):
                 blocks.append([np.random.randint(0, self.grid_size[0]), np.random.randint(0, self.grid_size[1])])
             self.bottlenecks = []
             return blocks
+
         if 'two_rooms' in pattern:
             mid = int(self.grid_size[0] // 2)
             blocks = [[mid,i] for i in range(self.grid_size[1])]
@@ -234,6 +254,7 @@ class SimpleGrid:
             for bottleneck in self.bottlenecks:
                 blocks.remove(bottleneck)
             return blocks
+
         if pattern == 'sutton':
             assert self.grid_size[0] % 6 == 0
             assert self.grid_size[1] % 9 == 0
@@ -248,10 +269,12 @@ class SimpleGrid:
 
             blocks = blocks_a + blocks_b + blocks_c
             return blocks
+
         if pattern == 'dual_linear':
             assert self.grid_size == (3, 10)
             blocks = [[1, i] for i in range(10)]
             return blocks
+
         if pattern == 'tolman':
             assert self.grid_size[0] == self.grid_size[1]
             assert self.grid_size[0] % 10 == 0
@@ -270,6 +293,7 @@ class SimpleGrid:
                 blocks += [[6*k + x, 6*k + y], [9*k + x, 6*k + y]]
                 blocks += [[i*k + x, j*k + y] for i, j in product(range(2, 8), range(8, 10))]
             return blocks
+
         if 'detour' in pattern:
             assert self.grid_size[0] == self.grid_size[1]
             assert self.grid_size[0] % 10 == 0
@@ -303,13 +327,16 @@ class SimpleGrid:
         return grid
 
     def move_agent(self, direction):
+        # do not move agent if it is in a goal position with non-zero reward
         if (self.agent_pos not in self.goal_pos) or (self.reward_val == 0):
-            if (self.block_pattern != 'six_rooms_tr') or \
+            if (self.teleports == {}) or \
                 (tuple(self.agent_pos) not in self.teleports.keys()) or \
                 (tuple(direction) not in self.teleports[tuple(self.agent_pos)].keys()):
                 new_pos = self.agent_pos + direction
             else:
                 new_pos = self.teleports[tuple(self.agent_pos)][tuple(direction)]
+
+            # prevent agent going into wall or going out of grid
             if self.check_target(new_pos):
                 self.agent_pos = list(new_pos)
 

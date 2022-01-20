@@ -26,6 +26,10 @@ def agent_factory(args, state_size, action_size):
         agent = algs.PARSR(state_size, action_size, goal_pri=True, online=True, **vars(args))
     elif args.agent == 'mparsr':
         agent = algs.PARSR(state_size, action_size, goal_pri=False, online=True, **vars(args))
+    elif args.agent == 'qparsr_nosweep':
+        agent = algs.PARSR(state_size, action_size, goal_pri=True, online=True, sweeping=False, **vars(args))
+    elif args.agent == 'mparsr_nosweep':
+        agent = algs.PARSR(state_size, action_size, goal_pri=False, online=True, sweeping=False, **vars(args))
     elif args.agent == 'qpeparsr':
         agent = algs.PEPARSR(state_size, action_size, goal_pri=True, online=True, **vars(args))
     elif args.agent == 'mpeparsr':

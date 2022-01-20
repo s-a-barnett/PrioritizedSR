@@ -561,12 +561,13 @@ class DynaSRPlus(DynaSR):
 
 class PARSR(TDSR):
 
-    def __init__(self, state_size, action_size, num_recall=10, theta=1e-6, goal_pri=True, online=False, **kwargs):
+    def __init__(self, state_size, action_size, num_recall=10, theta=1e-6, goal_pri=True, online=False, sweeping=True, **kwargs):
         super().__init__(state_size, action_size, **kwargs)
         self.num_recall = num_recall
         self.theta = theta
         self.goal_pri = goal_pri
         self.online = online
+        self.sweeping = sweeping
         self.pqueue = utils.PriorityQueue()
         self.predecessors = defaultdict(set)
         self.model = {}
@@ -602,7 +603,8 @@ class PARSR(TDSR):
 
         # update (deterministic) model and state predecessors
         self.model[(state, action)] = (next_state, reward, done)
-        self._update_predecessors(state, action, next_state)
+        if self.sweeping:
+            self._update_predecessors(state, action, next_state)
 
         # compute value of update
         m_error = self.update_sr(current_exp, prospective=(not self.online), **kwargs)
@@ -629,14 +631,15 @@ class PARSR(TDSR):
             m_error = self.update_sr(exp)
             # w_error = self.update_w(exp)
 
-            for s, a in self.predecessors[state]:
-                # add predecessors to priority queue
-                exp_pred = (s, a) + self.model[(s, a)]
-                m_error = self.update_sr(exp_pred, prospective=(not self.online))
-                # w_error = self.update_w(current_exp)
-                priority = self.priority(m_error, exp_pred)
-                if priority >= self.theta:
-                    self.pqueue.push((s, a), -priority)
+            if self.sweeping:
+                for s, a in self.predecessors[state]:
+                    # add predecessors to priority queue
+                    exp_pred = (s, a) + self.model[(s, a)]
+                    m_error = self.update_sr(exp_pred, prospective=(not self.online))
+                    # w_error = self.update_w(current_exp)
+                    priority = self.priority(m_error, exp_pred)
+                    if priority >= self.theta:
+                        self.pqueue.push((s, a), -priority)
 
         td_error = {'m': np.linalg.norm(m_error), 'w': np.linalg.norm(w_error)}
         return td_error

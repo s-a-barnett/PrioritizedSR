@@ -93,6 +93,10 @@ def main(args):
     num_eps_phase1 = 0
     num_eps_phase2 = 0
 
+    weights_allruns = []
+    srs_allruns = []
+    max_run_length = 0
+
     for i in tqdm.tqdm(range(args.num_runs)):
         env = Sequential()
         agent = utils.agent_factory(args, env.state_size, env.action_size)
@@ -106,12 +110,14 @@ def main(args):
         phase1_results = []
         passed_phase1 = False
 
-        # weights = []
+        weights = []
+        srs = []
 
         for j in range(args.max_episodes):
             # train for an episode
-            _, _ = utils.run_episode(agent, env, beta=args.beta, reward_val=reward_val, agent_pos=0)
-            # weights.append(state_weights(agent))
+            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=0)
+            weights.append(state_weights(agent))
+            srs.append(agent.get_M_states(beta=args.beta, epsilon=args.epsilon))
             # test agent
             phase1_results.append(test_agent(agent, 1, args.condition))
             if np.sum(np.array(phase1_results)[-3:]) == 3:
@@ -139,21 +145,25 @@ def main(args):
         for j in range(args.max_episodes):
             # train agent
             for state in introstates:
-                _, _ = utils.run_episode(agent, env, beta=args.beta,reward_val=reward_val, agent_pos=state)
+                _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=state)
                 # for action in [0, 1]:
                 #     env.reset(agent_pos=state, reward_val=reward_val)
                 #     reward = env.step(action)
                 #     state_next = env.observation
                 #     done = env.done
                 #     agent.update((state, action, state_next, reward, done))
-            # weights.append(state_weights(agent))
+            weights.append(state_weights(agent))
+            srs.append(agent.get_M_states(beta=args.beta, epsilon=args.epsilon))
             # test agent
             phase2_results.append(test_agent(agent, 2, args.condition))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True
                 break
 
-        # weights_all_runs.append(np.stack(weights))
+        weights_allruns.append(np.stack(weights))
+        srs_allruns.append(np.stack(srs))
+        max_run_length = np.maximum(max_run_length, len(srs))
+
         # == PHASE 2: TEST ==
         num_eps_phase2 += (j+1) / args.num_runs
         if passed_phase2:
@@ -176,10 +186,22 @@ def main(args):
     os.mkdir(log_dir)
     np.save(os.path.join(log_dir, 'prioritized_states.npy'), pss)
 
+    for idx in range(len(weights_allruns)):
+        weights = weights_allruns[idx]
+        pad_width = int(max_run_length - weights.shape[0])
+        weights = np.pad(weights, ((0, pad_width), (0, 0)), mode='edge')
+        weights_allruns[idx] = weights
+        if 'sr' in args.agent:
+            srs = srs_allruns[idx]
+            srs = np.pad(srs, ((0, pad_width), (0, 0), (0, 0)), mode='edge')
+            srs_allruns[idx] = srs
+
     if 'sr' in args.agent:
         np.save(os.path.join(log_dir, 'Ms.npy'), Ms)
+        np.save(os.path.join(log_dir, 'srs.npy'), np.stack(srs_allruns))
 
     np.save(os.path.join(log_dir, 'Qs.npy'), Qs)
+    np.save(os.path.join(log_dir, 'weights.npy'), np.stack(weights_allruns))
 
     args_vals = [str(val) for val in args_dict.values()]
 
@@ -196,6 +218,8 @@ if __name__ == '__main__':
     parser.add_argument('--agent', type=str, default='dynasr', help='algorithm')
     parser.add_argument('--lr', type=float, default=1e-1, help='learning rate')
     parser.add_argument('--beta', type=float, default=5, help='softmax inverse temp')
+    parser.add_argument('--epsilon', type=float, default=1e-1, help='epsilon greedy exploration parameter')
+    parser.add_argument('--poltype', type=str, default='softmax', help='egreedy or softmax')
     parser.add_argument('--theta', type=float, default=1e-6, help='ps theta')
     parser.add_argument('--gamma', type=float, default=0.95, help='discount factor for agent')
     parser.add_argument('--num_runs', type=int, default=100, help='experiment runs')

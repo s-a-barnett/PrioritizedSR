@@ -2,18 +2,18 @@ import numpy as np
 import pandas as pd
 import os
 
-output_file = 'hyperparameters_six_rooms.csv'
+output_file = 'hyperparameters_rm_detour.csv'
 real_path = os.path.realpath(__file__)
 dir_path = os.path.dirname(real_path)
 
 hyp_dict = {
-    'agent': ['dynasr', 'mparsr_nosweep', 'qparsr_nosweep'],
+    'agent': ['dynaq', 'dynasr', 'mparsr_nosweep', 'qparsr_nosweep'],
     'lr': [0.1],
-    'epsilon': [0.3, 0.5, 1.0],
+    'epsilon': [0.1, 0.3, 0.5, 1.0],
     'poltype': ['egreedy'],
-    'num_recall': [10, 30, 100, 300, 1000],
+    'num_recall': [10, 30, 100],
     'seed': list(range(10)),
-    'condition': ['control', 'reward', 'transition', 'policy']
+    # 'condition': ['control', 'reward', 'transition', 'policy']
 }
 
 index = pd.MultiIndex.from_product(hyp_dict.values(), names=hyp_dict.keys())

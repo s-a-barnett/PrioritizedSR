@@ -19,7 +19,7 @@ class TDQ:
 
         self.lr = lr
         self.gamma = gamma
-        self.prioritized_states = np.zeros(state_size, dtype=np.int)
+        self.prioritized_states = np.zeros((action_size, state_size), dtype=np.int)
         self.num_updates = 0
         self.poltype = poltype
         
@@ -105,7 +105,7 @@ class DynaQ(TDQ):
 
         for i in range(self.num_recall):
             exp = self._sample_model()
-            self.prioritized_states[exp[0]] += 1
+            self.prioritized_states[exp[1], exp[0]] += 1
             super().update(exp)
 
         return td_error
@@ -179,7 +179,7 @@ class PSQ(TDQ):
 
             # get highest priority experience
             state, action = self.pqueue.pop()
-            self.prioritized_states[state] += 1
+            self.prioritized_states[action, state] += 1
             exp = (state, action) + self.model[(state, action)]
 
             # update Q based on this experience
@@ -340,7 +340,7 @@ class MDQ(TDQ):
 
             for i in range(len(best_exp)):
                 q_error = self.update_q_nstep(best_exp[i:])
-                self.prioritized_states[best_exp[i][0]] += 1
+                self.prioritized_states[best_exp[i][1], best_exp[i][0]] += 1
 
             self.recalled.append(best_exp)
 
@@ -366,7 +366,7 @@ class TDSR:
         self.w = np.zeros(state_size)
         self.lr = lr
         self.gamma = gamma
-        self.prioritized_states = np.zeros(state_size, dtype=np.int)
+        self.prioritized_states = np.zeros((action_size, state_size), dtype=np.int)
         self.num_updates = 0
 
     def Q_estimates(self, state):
@@ -512,7 +512,7 @@ class DynaSR(TDSR):
 
         for i in range(self.num_recall):
             exp = self._sample_model()
-            self.prioritized_states[exp[0]] += 1
+            self.prioritized_states[exp[1], exp[0]] += 1
             m_error = self.update_sr(exp, **kwargs)
             self.num_updates += 1
 
@@ -624,7 +624,7 @@ class PARSR(TDSR):
                 # get highest priority experience
                 state, action = self.pqueue.pop()
                 exp = (state, action) + self.model[(state, action)]
-            self.prioritized_states[exp[0]] += 1
+            self.prioritized_states[exp[1], exp[0]] += 1
             self.recalled.append([exp])
 
             # update M and w based on this experience

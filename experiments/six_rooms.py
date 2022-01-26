@@ -70,22 +70,21 @@ def main(args):
             correct_goals = goal_states[condition_p1goalidxs[condition]]
             return np.allclose(reached_goals, correct_goals) and np.allclose(trajlengths, correct_trajlengths)
         elif phase == 2:
-            if condition != 'transition':
-                V_term = state_weights(agent)[list(goal_states)]
-                correct_order = np.argsort(condition_rewards[condition])
-                return np.allclose(correct_order, np.argsort(V_term))
-            else:
-                correct_goals = goal_states[condition_p3goalidxs[condition]]
-                return np.allclose(reached_goals[1:], correct_goals[1:]) and np.allclose(trajlengths[1:], correct_trajlengths[1:])
+            correct_goals = goal_states[condition_p3goalidxs[condition]]
+            return np.allclose(reached_goals[1:], correct_goals[1:]) and np.allclose(trajlengths[1:], correct_trajlengths[1:])
         elif phase == 3:
             correct_goals = goal_states[condition_p3goalidxs[condition]]
             return (reached_goals[0] == correct_goals[0]) and (trajlengths[0] == correct_trajlengths[0])
         else:
             raise ValueError('phase must be 1, 2, or 3')
 
-    Qs = np.zeros((args.num_runs, env.action_size, env.state_size))
-    Ms = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
-    pss = np.zeros((args.num_runs, env.state_size))
+    Qs1 = np.zeros((args.num_runs, env.action_size, env.state_size))
+    Ms1 = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
+    pss1 = np.zeros((args.num_runs, env.action_size, env.state_size))
+
+    Qs2 = np.zeros((args.num_runs, env.action_size, env.state_size))
+    Ms2 = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
+    pss2 = np.zeros((args.num_runs, env.action_size, env.state_size))
 
     num_eps_phase1 = 0
     num_eps_phase2 = 0
@@ -112,15 +111,16 @@ def main(args):
                 passed_phase1 = True
                 break
 
+        Qs1[i] = agent.Q.copy()
+        if 'sr' in args.agent:
+            Ms1[i] = agent.M.copy()
+        pss1[i] = agent.prioritized_states.copy()
+
         # == PHASE 1: TEST ==
         num_eps_phase1 += (j+1) / args.num_runs
         if passed_phase1:
             learns_p1 += 1 / args.num_runs
         else:
-            Qs[i] = agent.Q.copy()
-            if 'sr' in args.agent:
-                Ms[i] = agent.M.copy()
-            pss[i] = agent.prioritized_states.copy()
             continue
 
         # == PHASE 2: TRAIN ==
@@ -152,24 +152,20 @@ def main(args):
                 passed_phase2 = True
                 break
 
+        Qs2[i] = agent.Q.copy()
+        if 'sr' in args.agent:
+            Ms2[i] = agent.M.copy()
+        pss2[i] = agent.prioritized_states.copy()
+
         # == PHASE 2: TEST ==
         num_eps_phase2 += (j+1) / args.num_runs
         if passed_phase2:
             learns_p2 += 1 / args.num_runs
         else:
-            Qs[i] = agent.Q.copy()
-            if 'sr' in args.agent:
-                Ms[i] = agent.M.copy()
-            pss[i] = agent.prioritized_states.copy()
             continue
 
         # == PHASE 3: TEST ==
         learns_p3 += test_agent(agent, env, 3, args.condition, reward_val) / args.num_runs
-
-        Qs[i] = agent.Q.copy()
-        if 'sr' in args.agent:
-            Ms[i] = agent.M.copy()
-        pss[i] = agent.prioritized_states.copy()
 
     # lazy fix for bug in recording number of episodes to learn each phase
     if learns_p1 > 0:
@@ -190,12 +186,15 @@ def main(args):
         log_name = args.agent + '_' + exp_id
         log_dir = os.path.join(output_dir, log_name)
         os.mkdir(log_dir)
-        np.save(os.path.join(log_dir, 'prioritized_states.npy'), pss)
+        np.save(os.path.join(log_dir, 'prioritized_states1.npy'), pss1)
+        np.save(os.path.join(log_dir, 'prioritized_states2.npy'), pss2)
 
         if 'sr' in args.agent:
-            np.save(os.path.join(log_dir, 'Ms.npy'), Ms)
+            np.save(os.path.join(log_dir, 'Ms1.npy'), Ms1)
+            np.save(os.path.join(log_dir, 'Ms2.npy'), Ms2)
 
-        np.save(os.path.join(log_dir, 'Qs.npy'), Qs)
+        np.save(os.path.join(log_dir, 'Qs1.npy'), Qs1)
+        np.save(os.path.join(log_dir, 'Qs2.npy'), Qs2)
 
         with open(args.output, 'a') as f:
             f.write(results_string)

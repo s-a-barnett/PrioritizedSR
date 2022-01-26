@@ -15,7 +15,7 @@ module load anaconda3
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
 # mkdir -p /tigress/samuelab/PrioritizedSR/logs/sequential/run9/
 
-ITERS_PER_JOB=5
+ITERS_PER_JOB=10
 START=$(( $SLURM_ARRAY_TASK_ID * $ITERS_PER_JOB ))
 END=$(( $START + $(($ITERS_PER_JOB - 1)) ))
 for i in $(seq $START $END)

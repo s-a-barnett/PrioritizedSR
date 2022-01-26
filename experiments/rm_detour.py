@@ -29,25 +29,25 @@ def main(args):
     npr.seed(args.seed)
     r = args.res
     grid_size = (10*r, 10*r)
-    agent_pos = [4*r, 0]
+    agent_start = [4*r, 0]
     goal_pos = [[4*r + x, 9*r + y] for x, y in itertools.product(range(r), range(r))]
     reward_val = 10
     optimal_episode_lengths = {'before': 9*r, 'after': 11*r + 2}
 
-    env = SimpleGrid(grid_size, block_pattern='detour_before')
-    Qs_before = np.zeros((args.num_runs, env.action_size, env.state_size))
+    env_before = SimpleGrid(grid_size, block_pattern='detour_before')
+    Qs_before = np.zeros((args.num_runs, env_before.action_size, env_before.state_size))
     Qs_after = np.zeros_like(Qs_before)
-    Ms_before = np.zeros((args.num_runs, env.action_size, env.state_size, env.state_size))
+    Ms_before = np.zeros((args.num_runs, env_before.action_size, env_before.state_size, env_before.state_size))
     Ms_after = np.zeros_like(Ms_before)
-    pss_before = np.zeros((args.num_runs, env.state_size))
+    pss_before = np.zeros((args.num_runs, env_before.action_size, env_before.state_size))
     pss_after = np.zeros_like(pss_before)
 
     for i in tqdm.tqdm(range(args.num_runs)):
-        agent = utils.agent_factory(args, env.state_size, env.action_size)
+        agent = utils.agent_factory(args, env_before.state_size, env_before.action_size)
 
         # train on original task
         for j in range(args.max_episodes):
-            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype,  agent_pos=agent_pos, goal_pos=goal_pos, reward_val=reward_val, episode_length=args.max_episode_length)
+            _, _ = utils.run_episode(agent, env_before, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype,  agent_pos=agent_start, goal_pos=goal_pos, reward_val=reward_val, episode_length=args.max_episode_length)
 
         # record Q value for original task
         Qs_before[i] = agent.Q.copy()
@@ -56,16 +56,16 @@ def main(args):
         pss_before[i] = agent.prioritized_states.copy()
 
         # introduce wall
-        env = SimpleGrid(grid_size, block_pattern='detour_after')
+        env_after = SimpleGrid(grid_size, block_pattern='detour_after')
 
         for j in range(args.max_episodes):
             for x in range(r):
-                env.reset(agent_pos=[4*r + x, 5*r -1], goal_pos=goal_pos, reward_val=reward_val)
-                state = env.observation
+                env_after.reset(agent_pos=[4*r + x, 5*r -1], goal_pos=goal_pos, reward_val=reward_val)
+                state = env_after.observation
                 action = 3
-                reward = env.step(action)
-                state_next = env.observation
-                done = env.done
+                reward = env_after.step(action)
+                state_next = env_after.observation
+                done = env_after.done
                 agent.update((state, action, state_next, reward, done))
 
         # record Q value for detour
@@ -75,8 +75,8 @@ def main(args):
         pss_after[i] = agent.prioritized_states.copy()
         
     # get run lengths for each of these tasks
-    before_lengths = np.array([test_from_Q(Qs_before[i], env, agent_pos, goal_pos, reward_val, args) for i in range(args.num_runs)])
-    after_lengths = np.array([test_from_Q(Qs_after[i], env, agent_pos, goal_pos, reward_val, args) for i in range(args.num_runs)])
+    before_lengths = np.array([test_from_Q(Qs_before[i], env_before, agent_start, goal_pos, reward_val, args) for i in range(args.num_runs)])
+    after_lengths = np.array([test_from_Q(Qs_after[i], env_after, agent_start, goal_pos, reward_val, args) for i in range(args.num_runs)])
 
     learns_before = (before_lengths == optimal_episode_lengths['before'])
     learns_after  = (after_lengths  == optimal_episode_lengths['after'])
@@ -94,8 +94,8 @@ def main(args):
         log_name = args.agent + '_' + exp_id
         log_dir = os.path.join(output_dir, log_name)
         os.mkdir(log_dir)
-        np.save(os.path.join(log_dir, 'prioritized_states_before.npy'), agent.prioritized_states_before)
-        np.save(os.path.join(log_dir, 'prioritized_states_after.npy'), agent.prioritized_states_after)
+        np.save(os.path.join(log_dir, 'prioritized_states_before.npy'), pss_before)
+        np.save(os.path.join(log_dir, 'prioritized_states_after.npy'), pss_after)
 
         if 'sr' in args.agent:
             np.save(os.path.join(log_dir, 'Ms_before.npy'), Ms_before)

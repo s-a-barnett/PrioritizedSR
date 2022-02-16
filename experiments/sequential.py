@@ -84,6 +84,9 @@ def main(args):
             with open(args.output, 'a') as f:
                 f.write(columns_string)
 
+    # sarsa = (args.agent == 'dynasr')
+    sarsa = False
+
     npr.seed(args.seed)
     agent_pos = 0
     env = Sequential()
@@ -121,7 +124,8 @@ def main(args):
 
         for j in range(args.max_episodes):
             # train for an episode
-            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=0)
+            # _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=0, sarsa=sarsa)
+            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, sarsa=sarsa)
             # weights.append(state_weights(agent))
             # if 'sr' in args.agent:
             #     srs.append(agent.get_M_states(beta=args.beta, epsilon=args.epsilon))
@@ -157,7 +161,7 @@ def main(args):
         for j in range(args.max_episodes):
             # train agent
             for state in introstates:
-                _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=state)
+                _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, agent_pos=state, sarsa=sarsa)
             # weights.append(state_weights(agent))
             # if 'sr' in args.agent:
             #     srs.append(agent.get_M_states(beta=args.beta, epsilon=args.epsilon))

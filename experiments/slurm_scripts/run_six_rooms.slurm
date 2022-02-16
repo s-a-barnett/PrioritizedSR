@@ -11,11 +11,10 @@
 #SBATCH --mail-type=all
 #SBATCH --mail-user=samuelab@princeton.edu
 
-module load anaconda3
+module load anaconda3/2020.11
 cd /home/samuelab/Repos/PrioritizedSR/experiments/
-# mkdir -p /tigress/samuelab/PrioritizedSR/logs/six_rooms/run3/
 
-ITERS_PER_JOB=16
+ITERS_PER_JOB=4
 START=$(( $SLURM_ARRAY_TASK_ID * $ITERS_PER_JOB ))
 END=$(( $START + $(($ITERS_PER_JOB - 1)) ))
 for i in $(seq $START $END)

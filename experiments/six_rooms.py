@@ -48,6 +48,9 @@ def main(args):
             with open(args.output, 'a') as f:
                 f.write(columns_string)
 
+    # sarsa = (args.agent == 'dynasr')
+    sarsa = False
+
     npr.seed(args.seed)
     env = SimpleGrid(args.grid_size, block_pattern='six_rooms')
     room_length = env.mid - env.onesixth
@@ -104,7 +107,7 @@ def main(args):
 
         for j in range(args.max_episodes):
             # train for an episode
-            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, goal_pos=goal_pos, episode_length=args.max_episode_length)
+            _, _ = utils.run_episode(agent, env, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype, reward_val=reward_val, goal_pos=goal_pos, episode_length=args.max_episode_length, sarsa=sarsa)
             # test agent
             phase1_results.append(test_agent(agent, env, 1, args.condition, reward_val))
             if np.sum(np.array(phase1_results)[-3:]) == 3:
@@ -145,8 +148,14 @@ def main(args):
                     reward = env.step(action)
                     state_next = env.observation
                     done = env.done
-                    agent.update((state, action, state_next, reward, done))
-            # # test agent
+                    exp = (state, action, state_next, reward, done)
+                    if sarsa:
+                        next_action = agent.sample_action(state_next, epsilon=args.epsilon, beta=args.beta)
+                        next_exp = (None, next_action, None, None, None)
+                    else:
+                        next_exp = None
+                    agent.update(exp, next_exp=next_exp)
+            # test agent
             phase2_results.append(test_agent(agent, env, 2, args.condition, reward_val))
             if np.sum(np.array(phase2_results)[-3:]) == 3:
                 passed_phase2 = True

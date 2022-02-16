@@ -7,11 +7,11 @@ real_path = os.path.realpath(__file__)
 dir_path = os.path.dirname(real_path)
 
 hyp_dict = {
-    'agent': ['dynaq', 'dynasr', 'mparsr_nosweep', 'qparsr_nosweep'],
+    'agent': ['psq', 'dynaq', 'dynasr', 'mparsr_nosweep', 'qparsr_nosweep'],
     'lr': [0.1],
     'epsilon': [0.1, 0.3, 0.5, 1.0],
     'poltype': ['egreedy'],
-    'num_recall': [10, 30, 100],
+    'num_recall': [100],
     'seed': list(range(10)),
     # 'condition': ['control', 'reward', 'transition', 'policy']
 }

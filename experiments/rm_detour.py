@@ -10,21 +10,20 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from prioritizedsr import algs, utils
 from prioritizedsr.gridworld import SimpleGrid
 
-def test_from_Q(Q, env, ap, gp, rw, args):
-    agent_test = algs.TDQ(env.state_size, env.action_size, Q_init=Q)
-    experiences, _ = utils.run_episode(agent_test, env, agent_pos=ap, goal_pos=gp, reward_val=rw, update=False)
-    return len(experiences)
-
 def main(args):
+    learns_before, learns_after = 0, 0
     args_dict = vars(args).copy()
     del args_dict['output']
     args_keys = list(args_dict.keys())
 
-    columns_string = ','.join(args_keys + ['learns_before', 'learns_after', 'learns_both', 'exp_id']) + '\n'
+    columns_string = ','.join(args_keys + ['learns_before', 'learns_after', 'num_eps_before', 'num_eps_after', 'exp_id']) + '\n'
     if not args.debug:
         if not os.path.exists(args.output):
             with open(args.output, 'a') as f:
                 f.write(columns_string)
+
+    # sarsa = (args.agent == 'dynasr')
+    sarsa = False
 
     npr.seed(args.seed)
     r = args.res
@@ -34,6 +33,11 @@ def main(args):
     reward_val = 10
     optimal_episode_lengths = {'before': 9*r, 'after': 11*r + 2}
 
+    def test_agent(agent, env, ap, gp, rw, phase):
+        experiences, _ = utils.run_episode(agent, env, agent_pos=ap, goal_pos=gp, reward_val=rw, update=False)
+        success = (len(experiences) == optimal_episode_lengths[phase])
+        return success
+
     env_before = SimpleGrid(grid_size, block_pattern='detour_before')
     Qs_before = np.zeros((args.num_runs, env_before.action_size, env_before.state_size))
     Qs_after = np.zeros_like(Qs_before)
@@ -42,12 +46,24 @@ def main(args):
     pss_before = np.zeros((args.num_runs, env_before.action_size, env_before.state_size))
     pss_after = np.zeros_like(pss_before)
 
+    num_eps_before = 0
+    num_eps_after = 0
+
     for i in tqdm.tqdm(range(args.num_runs)):
         agent = utils.agent_factory(args, env_before.state_size, env_before.action_size)
 
+        before_results = []
+        passed_before = False
+
         # train on original task
         for j in range(args.max_episodes):
-            _, _ = utils.run_episode(agent, env_before, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype,  agent_pos=agent_start, goal_pos=goal_pos, reward_val=reward_val, episode_length=args.max_episode_length)
+            # train for an episode
+            _, _ = utils.run_episode(agent, env_before, beta=args.beta, epsilon=args.epsilon, poltype=args.poltype,  agent_pos=agent_start, goal_pos=goal_pos, reward_val=reward_val, episode_length=args.max_episode_length, sarsa=sarsa)
+            # test agent
+            before_results.append(test_agent(agent, env_before, agent_start, goal_pos, reward_val, 'before'))
+            if np.sum(np.array(before_results)[-3:]) == 3:
+                passed_before = True
+                break
 
         # record Q value for original task
         Qs_before[i] = agent.Q.copy()
@@ -55,10 +71,20 @@ def main(args):
             Ms_before[i] = agent.M.copy()
         pss_before[i] = agent.prioritized_states.copy()
 
+        num_eps_before += (j+1) / args.num_runs
+        if passed_before:
+            learns_before += 1 / args.num_runs
+        else:
+            continue
+
         # introduce wall
         env_after = SimpleGrid(grid_size, block_pattern='detour_after')
 
+        after_results = []
+        passed_after = False
+
         for j in range(args.max_episodes):
+            # train agent
             for x in range(r):
                 env_after.reset(agent_pos=[4*r + x, 5*r -1], goal_pos=goal_pos, reward_val=reward_val)
                 state = env_after.observation
@@ -66,25 +92,38 @@ def main(args):
                 reward = env_after.step(action)
                 state_next = env_after.observation
                 done = env_after.done
-                agent.update((state, action, state_next, reward, done))
+                exp = (state, action, state_next, reward, done)
+                if sarsa:
+                    next_action = agent.sample_action(state_next, epsilon=args.epsilon, beta=args.beta)
+                    next_exp = (None, next_action, None, None, None)
+                else:
+                    next_exp = None
+                agent.update(exp, next_exp=next_exp)
+            # test agent
+            after_results.append(test_agent(agent, env_after, agent_start, goal_pos, reward_val, 'after'))
+            if np.sum(np.array(after_results)[-3:]) == 3:
+                passed_after = True
+                break
 
         # record Q value for detour
         Qs_after[i] = agent.Q.copy()
         if 'sr' in args.agent:
             Ms_after[i] = agent.M.copy()
         pss_after[i] = agent.prioritized_states.copy()
-        
-    # get run lengths for each of these tasks
-    before_lengths = np.array([test_from_Q(Qs_before[i], env_before, agent_start, goal_pos, reward_val, args) for i in range(args.num_runs)])
-    after_lengths = np.array([test_from_Q(Qs_after[i], env_after, agent_start, goal_pos, reward_val, args) for i in range(args.num_runs)])
 
-    learns_before = (before_lengths == optimal_episode_lengths['before'])
-    learns_after  = (after_lengths  == optimal_episode_lengths['after'])
-    learns_both   = learns_before * learns_after
+        num_eps_after += (j+1) / args.num_runs
+        if passed_after:
+            learns_after += 1 / args.num_runs
+        
+    # lazy fix for bug in recording number of episodes to learn each phase
+    if learns_before > 0:
+        num_eps_before /= learns_before
+    if learns_after > 0:
+        num_eps_after /= learns_after
 
     exp_id = str(uuid.uuid4())
     args_vals = [str(val) for val in args_dict.values()]
-    results_string = ','.join(args_vals + [str(np.mean(learns_before)), str(np.mean(learns_after)), str(np.mean(learns_both)), exp_id]) + '\n'
+    results_string = ','.join(args_vals + [str(np.round_(learns_before, 2)), str(np.round_(learns_after, 2)), str(np.round_(num_eps_before, 2)), str(np.round_(num_eps_after, 2)), exp_id]) + '\n'
 
     if args.debug:
         print(columns_string)

@@ -175,9 +175,6 @@ def main(args):
     return 0
 
 if __name__ == '__main__':
-    default_path = os.path.join(os.path.expanduser('~'), 
-                                'scr/parsr/out.csv')
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--condition', type=str, default='control', help='experiment type')

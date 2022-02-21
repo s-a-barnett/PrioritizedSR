@@ -1,3 +1,17 @@
+# old experiments
+four_rooms_detour.py
+four_rooms.py
+fr_policy_reval.py
+fvsr_openmaze.py
+rm_detour.py
+peng_williams.py
+policy_reval.py
+slurm_scripts/
+hyperparameters_four_rooms.csv
+hyperparameters_fr_viz.csv
+hyperparameters_rm.csv
+hyperparameters_rm_detour.csv
+
 *.swp
 
 # Byte-compiled / optimized / DLL files
